@@ -15,8 +15,11 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   BookOpen,
+  Lock,
+  Crown,
+  KeyRound,
 } from 'lucide-react';
-import { GameSettings, GameMode } from '../types/game';
+import { GameSettings, GameMode, AppLicenseMode } from '../types/game';
 import { SettingsModal } from './SettingsModal';
 
 interface StartScreenProps {
@@ -24,6 +27,8 @@ interface StartScreenProps {
   highScore1P: number;
   highScore2P: { p1: number; p2: number };
   activeQuestionsCount: number;
+  licenseMode: AppLicenseMode;
+  onOpenActivation: () => void;
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
   onQuestionsUpdated: (count: number) => void;
   onResetScores: () => void;
@@ -35,12 +40,23 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   highScore1P,
   highScore2P,
   activeQuestionsCount,
+  licenseMode,
+  onOpenActivation,
   onUpdateSettings,
   onQuestionsUpdated,
   onResetScores,
   onStartGame,
 }) => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const isDemo = licenseMode === 'DEMO';
+
+  const handleProtectedAction = (action: () => void) => {
+    if (isDemo) {
+      onOpenActivation();
+    } else {
+      action();
+    }
+  };
 
   return (
     <div className="relative min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between overflow-x-hidden selection:bg-sky-500 selection:text-white">
@@ -64,19 +80,42 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </div>
         </div>
 
-        {/* Right side controls: Settings & High Score */}
+        {/* Right side controls: Activation / License Badge, Settings & High Score */}
         <div className="flex items-center gap-2">
-          {/* Unified Settings Button */}
+          {/* Topup / Activation Button */}
+          {isDemo ? (
+            <button
+              type="button"
+              onClick={onOpenActivation}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-['Outfit'] font-black text-xs shadow-lg shadow-amber-500/25 active:scale-95 transition-all cursor-pointer"
+            >
+              <Crown className="w-3.5 h-3.5 fill-slate-950" />
+              <span>Buka Mode Full ⚡</span>
+            </button>
+          ) : (
+            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-300 font-['Outfit'] font-black text-xs shadow-inner">
+              <Crown className="w-3.5 h-3.5 fill-amber-400" />
+              <span>Mode Full Aktif</span>
+            </div>
+          )}
+
+          {/* Settings Button */}
           <button
             type="button"
-            onClick={() => setShowSettingsModal(true)}
+            onClick={() => handleProtectedAction(() => setShowSettingsModal(true))}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md bg-white/10 hover:bg-white/15 border border-white/20 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
           >
-            <Settings className="w-3.5 h-3.5 text-sky-400" />
+            {isDemo ? (
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Settings className="w-3.5 h-3.5 text-sky-400" />
+            )}
             <span className="hidden sm:inline">Pengaturan & Soal</span>
             <span className="sm:hidden">Pengaturan</span>
+            {isDemo && <span className="text-[9px] text-amber-400 font-black">🔒</span>}
           </button>
 
+          {/* High Score Badge */}
           <div className="flex items-center gap-2 px-3 py-1 rounded-xl backdrop-blur-md bg-white/10 border border-amber-500/30 shadow-inner">
             <Trophy className="w-3.5 h-3.5 text-amber-400" />
             <div className="text-right">
@@ -98,7 +137,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         {/* Banner Pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full backdrop-blur-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-xs font-semibold mb-3 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-          <span>Karakter Kiper & Bola Versi 3D · Tampilan Kaca Bening Transparan</span>
+          <span>
+            {isDemo
+              ? 'Mode Demo: Akses 1 Pemain Solo · Buka Mode Full untuk Semua Fitur'
+              : 'Mode Full Aktif · Karakter Kiper 3D, Duel 2P, & Kaca Transparan'}
+          </span>
         </div>
 
         {/* Hero Title */}
@@ -122,7 +165,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             PILIH MODE PERMAINAN
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* 1 Pemain Button */}
+            {/* 1 Pemain Button - SELALU TERBUKA (BISA DIAKSES PADA DEMO) */}
             <button
               type="button"
               onClick={() => onUpdateSettings({ mode: '1P' })}
@@ -136,11 +179,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
                   <User className="w-5 h-5" />
                 </div>
-                {settings.mode === '1P' && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-sky-500 text-slate-950 text-[10px] font-black uppercase">
-                    Aktif
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase">
+                    Akses Terbuka
                   </span>
-                )}
+                  {settings.mode === '1P' && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-sky-500 text-slate-950 text-[10px] font-black uppercase">
+                      Aktif
+                    </span>
+                  )}
+                </div>
               </div>
               <h3 className="text-base font-black text-white font-['Outfit']">
                 Mode 1 Pemain (Solo)
@@ -150,12 +198,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </p>
             </button>
 
-            {/* 2 Pemain Button */}
+            {/* 2 Pemain Button - TERKUNCI PADA MODE DEMO */}
             <button
               type="button"
-              onClick={() => onUpdateSettings({ mode: '2P' })}
+              onClick={() => handleProtectedAction(() => onUpdateSettings({ mode: '2P' }))}
               className={`p-4 rounded-2xl border-2 text-left transition-all relative overflow-hidden cursor-pointer ${
-                settings.mode === '2P'
+                isDemo
+                  ? 'backdrop-blur-md bg-slate-900/40 border-amber-500/30 opacity-75 hover:border-amber-400'
+                  : settings.mode === '2P'
                   ? 'bg-gradient-to-br from-indigo-950/80 to-slate-900 border-indigo-400 shadow-xl shadow-indigo-500/20'
                   : 'backdrop-blur-md bg-slate-900/60 border-slate-800 hover:border-slate-700 opacity-70 hover:opacity-100'
               }`}
@@ -164,17 +214,24 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
                   <Users className="w-5 h-5" />
                 </div>
-                {settings.mode === '2P' && (
+                {isDemo ? (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/25 border border-amber-400 text-amber-300 text-[10px] font-black uppercase flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Terkunci (Mode Full)
+                  </span>
+                ) : settings.mode === '2P' ? (
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase">
                     Aktif
                   </span>
-                )}
+                ) : null}
               </div>
-              <h3 className="text-base font-black text-white font-['Outfit']">
-                Mode 2 Pemain (Duel Layar Bagi 2)
+              <h3 className="text-base font-black text-white font-['Outfit'] flex items-center gap-1.5">
+                <span>Mode 2 Pemain (Duel Layar Bagi 2)</span>
+                {isDemo && <Lock className="w-3.5 h-3.5 text-amber-400" />}
               </h3>
               <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                Layar dibagi 2 (Kiri: Pemain 1, Kanan: Pemain 2) dengan soal acak berbeda untuk masing-masing pemain!
+                {isDemo
+                  ? 'Fitur duel layar bagi 2 hanya tersedia di Mode Full. Klik untuk aktivasi kode lisensi.'
+                  : 'Layar dibagi 2 (Kiri: Pemain 1, Kanan: Pemain 2) dengan soal acak berbeda untuk masing-masing pemain!'}
               </p>
             </button>
           </div>
@@ -187,24 +244,28 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold text-white">
-                Bank Soal: {activeQuestionsCount} Soal Aktif (Bawaan Standar)
+                Bank Soal: {activeQuestionsCount} Soal Aktif
               </span>
             </div>
             <button
               type="button"
-              onClick={() => setShowSettingsModal(true)}
-              className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold underline cursor-pointer"
+              onClick={() => handleProtectedAction(() => setShowSettingsModal(true))}
+              className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold underline flex items-center gap-1 cursor-pointer"
             >
-              Ubah / Impor Soal
+              {isDemo && <Lock className="w-2.5 h-2.5 text-amber-400" />}
+              <span>Ubah / Impor Soal</span>
             </button>
           </div>
 
           {/* Duration Selector & Toggles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1.5 uppercase tracking-wider">
-                Durasi Waktu Pertandingan
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  {isDemo && <Lock className="w-3 h-3 text-amber-400" />}
+                  <span>Durasi Waktu Pertandingan</span>
+                </label>
+              </div>
               <div className="flex gap-1.5">
                 {[
                   { label: '30 Detik', val: 30 },
@@ -214,12 +275,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   <button
                     key={dur.val}
                     type="button"
-                    onClick={() => onUpdateSettings({ durationSeconds: dur.val })}
+                    onClick={() => handleProtectedAction(() => onUpdateSettings({ durationSeconds: dur.val }))}
                     className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       settings.durationSeconds === dur.val
                         ? 'bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/30'
                         : 'bg-white/10 text-slate-200 hover:bg-white/15'
-                    }`}
+                    } ${isDemo && dur.val !== 30 ? 'opacity-50' : ''}`}
                   >
                     {dur.label}
                   </button>
@@ -235,9 +296,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <button
                   type="button"
                   onClick={() =>
-                    onUpdateSettings({
-                      kickSensitivity: settings.kickSensitivity === 'high' ? 'normal' : 'high',
-                    })
+                    handleProtectedAction(() =>
+                      onUpdateSettings({
+                        kickSensitivity: settings.kickSensitivity === 'high' ? 'normal' : 'high',
+                      })
+                    )
                   }
                   className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-colors flex items-center justify-center gap-1 cursor-pointer ${
                     settings.kickSensitivity === 'high'
@@ -251,10 +314,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setShowSettingsModal(true)}
+                  onClick={() => handleProtectedAction(() => setShowSettingsModal(true))}
                   className="flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border border-white/20 bg-white/10 hover:bg-white/20 text-sky-300 flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  {isDemo ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />}
                   <span>Pengaturan</span>
                 </button>
               </div>
@@ -265,11 +328,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           <div className="border-t border-white/10 pt-2.5">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                {isDemo && <Lock className="w-3 h-3 text-amber-400" />}
                 <span>Karakter Kiper 3D Lawan</span>
               </span>
               <button
                 type="button"
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => handleProtectedAction(() => setShowSettingsModal(true))}
                 className="text-[10px] text-sky-400 hover:text-sky-300 underline cursor-pointer"
               >
                 Pilihan Lengkap ⚙️
@@ -284,21 +348,21 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => onUpdateSettings({ goalkeeperCharacter: c.id })}
+                  onClick={() => handleProtectedAction(() => onUpdateSettings({ goalkeeperCharacter: c.id }))}
                   className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all cursor-pointer text-center ${
                     settings.goalkeeperCharacter === c.id
                       ? 'bg-sky-500/25 border-sky-400 text-sky-200 shadow-sm'
                       : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                  }`}
+                  } ${isDemo && c.id !== 'lion' ? 'opacity-50' : ''}`}
                 >
-                  {c.label}
+                  {c.label} {isDemo && c.id !== 'lion' && '🔒'}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Primary Action Button */}
+        {/* Primary Action Button - ALWAYS PLAYABLE! */}
         <button
           type="button"
           onClick={() => onStartGame(settings.mode)}
@@ -322,10 +386,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           highScore1P={highScore1P}
           highScore2P={highScore2P}
           activeQuestionsCount={activeQuestionsCount}
+          licenseMode={licenseMode}
           onClose={() => setShowSettingsModal(false)}
           onUpdateSettings={onUpdateSettings}
           onQuestionsUpdated={onQuestionsUpdated}
           onResetScores={onResetScores}
+          onOpenActivation={onOpenActivation}
         />
       )}
 

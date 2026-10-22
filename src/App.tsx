@@ -3,19 +3,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StartScreen } from './components/StartScreen';
 import { CameraARView } from './components/CameraARView';
 import { GameOverModal } from './components/GameOverModal';
+import { TopupActivationModal } from './components/TopupActivationModal';
 import { getStoredQuestions } from './game/questionManager';
-import { QuizQuestion, GameSettings, GameMode, PlayerSessionState } from './types/game';
+import {
+  QuizQuestion,
+  GameSettings,
+  GameMode,
+  PlayerSessionState,
+  AppLicenseMode,
+} from './types/game';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const HIGH_SCORE_1P_KEY = 'ar_sports_hero_highscore_1p';
 const HIGH_SCORE_2P_KEY = 'ar_sports_hero_highscore_2p';
+const LICENSE_KEY = 'ar_tendangan_pintar_license';
+const LICENSE_SEEN_KEY = 'ar_tendangan_pintar_topup_seen';
 
 export default function App() {
   const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'GAME_OVER'>('MENU');
+
+  // License Mode ('DEMO' or 'FULL')
+  const [licenseMode, setLicenseMode] = useState<AppLicenseMode>(() => {
+    try {
+      const saved = localStorage.getItem(LICENSE_KEY);
+      return saved === 'FULL' ? 'FULL' : 'DEMO';
+    } catch {
+      return 'DEMO';
+    }
+  });
+
+  // Show Topup Activation Modal initially if not yet activated to full
+  const [showTopupModal, setShowTopupModal] = useState<boolean>(() => {
+    try {
+      const savedLicense = localStorage.getItem(LICENSE_KEY);
+      const seen = localStorage.getItem(LICENSE_SEEN_KEY);
+      return savedLicense !== 'FULL' && !seen;
+    } catch {
+      return false;
+    }
+  });
 
   const [settings, setSettings] = useState<GameSettings>({
     mode: '1P',
@@ -24,6 +54,10 @@ export default function App() {
     showSkeleton: true,
     kickSensitivity: 'normal',
     goalkeeperCharacter: 'lion',
+    scorePerGoal: 100,
+    streakBonus: 20,
+    glassTransparency: 0.3,
+    questionCardSize: 'normal',
   });
 
   // Stored questions bank (includes any user imported questions, default 5)
@@ -69,14 +103,14 @@ export default function App() {
     const autostart = params.get('autostart');
     const modeParam = params.get('mode');
 
-    if (modeParam === '2p' || modeParam === '2P') {
+    if ((modeParam === '2p' || modeParam === '2P') && licenseMode === 'FULL') {
       setSettings((prev) => ({ ...prev, mode: '2P' }));
     }
 
     if (autostart === '1') {
       startGame();
     }
-  }, [startGame]);
+  }, [startGame, licenseMode]);
 
   // Update Settings
   const handleUpdateSettings = (newSettings: Partial<GameSettings>) => {
@@ -98,6 +132,28 @@ export default function App() {
       setHighScore2P({ p1: 0, p2: 0 });
     } catch {
       // ignore
+    }
+  };
+
+  // Activate Full Version
+  const handleActivateSuccess = () => {
+    setLicenseMode('FULL');
+    setShowTopupModal(false);
+    try {
+      localStorage.setItem(LICENSE_KEY, 'FULL');
+      localStorage.setItem(LICENSE_SEEN_KEY, 'true');
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
+  // Select Demo Mode
+  const handleSelectDemoMode = () => {
+    setShowTopupModal(false);
+    try {
+      localStorage.setItem(LICENSE_SEEN_KEY, 'true');
+    } catch (e) {
+      console.warn(e);
     }
   };
 
@@ -144,6 +200,8 @@ export default function App() {
           highScore1P={highScore1P}
           highScore2P={highScore2P}
           activeQuestionsCount={activeQuestions.length}
+          licenseMode={licenseMode}
+          onOpenActivation={() => setShowTopupModal(true)}
           onUpdateSettings={handleUpdateSettings}
           onQuestionsUpdated={handleQuestionsUpdated}
           onResetScores={handleResetScores}
@@ -186,6 +244,16 @@ export default function App() {
             onGoHome={() => setGameState('MENU')}
           />
         </div>
+      )}
+
+      {/* Topup Activation Modal */}
+      {showTopupModal && (
+        <TopupActivationModal
+          currentLicense={licenseMode}
+          onClose={() => setShowTopupModal(false)}
+          onActivateSuccess={handleActivateSuccess}
+          onSelectDemoMode={handleSelectDemoMode}
+        />
       )}
     </div>
   );

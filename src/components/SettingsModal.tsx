@@ -7,8 +7,6 @@ import React, { useState, useRef } from 'react';
 import {
   X,
   Upload,
-  Download,
-  RotateCcw,
   Volume2,
   Sparkles,
   Trophy,
@@ -16,15 +14,15 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileCode,
-  Gauge,
-  HelpCircle,
   Sliders,
-  Footprints,
   BookOpen,
-  Shield,
-  Bot,
+  Eye,
+  Type,
+  Coins,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
-import { GameSettings } from '../types/game';
+import { GameSettings, AppLicenseMode, QuestionCardSize } from '../types/game';
 import { QUESTION_BANK } from '../game/quizData';
 import {
   generateTemplateCSV,
@@ -41,10 +39,12 @@ interface SettingsModalProps {
   highScore1P: number;
   highScore2P: { p1: number; p2: number };
   activeQuestionsCount: number;
+  licenseMode?: AppLicenseMode;
   onClose: () => void;
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
   onQuestionsUpdated: (count: number) => void;
   onResetScores: () => void;
+  onOpenActivation?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -52,10 +52,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   highScore1P,
   highScore2P,
   activeQuestionsCount,
+  licenseMode = 'DEMO',
   onClose,
   onUpdateSettings,
   onQuestionsUpdated,
   onResetScores,
+  onOpenActivation,
 }) => {
   const [importStatus, setImportStatus] = useState<{
     type: 'success' | 'error' | null;
@@ -123,7 +125,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in select-none">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
@@ -132,11 +134,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               ⚙️
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-white font-['Outfit'] leading-none">
-                Menu Pengaturan & Bank Soal
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-white font-['Outfit'] leading-none">
+                  Menu Pengaturan & Kustomisasi
+                </h3>
+                {licenseMode === 'FULL' ? (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/25 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase">
+                    ⭐ Full
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenActivation?.();
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 hover:bg-sky-500/30 text-[10px] font-extrabold uppercase transition-colors cursor-pointer"
+                  >
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Mode Demo · Aktivasi</span>
+                  </button>
+                )}
+              </div>
               <p className="text-[11px] text-sky-400 font-medium mt-0.5">
-                Semua pengaturan durasi, sensor, unduh template, dan impor soal dalam satu menu
+                Pengaturan skor, tingkat transparansi kaca, ukuran soal, durasi, dan bank soal
               </p>
             </div>
           </div>
@@ -179,12 +200,194 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* SECTION 1: PENGATURAN PERTANDINGAN & SENSOR */}
+          {/* SECTION 1: PENGATURAN SKOR PERTANDINGAN */}
+          <section className="bg-slate-950/70 border border-amber-500/30 rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Coins className="w-4 h-4 text-amber-400" />
+                <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
+                  1. Pengaturan Skor Pertandingan
+                </h4>
+              </div>
+              <span className="text-[11px] font-bold text-amber-300 font-mono">
+                {settings.scorePerGoal || 100} Poin / Gol
+              </span>
+            </div>
+
+            {/* Poin Per Gol */}
+            <div className="mb-3.5">
+              <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                Nilai Poin Setiap Gol Benar:
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '50 Poin', val: 50 },
+                  { label: '100 Poin (Standar)', val: 100 },
+                  { label: '150 Poin', val: 150 },
+                  { label: '200 Poin', val: 200 },
+                ].map((item) => (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => onUpdateSettings({ scorePerGoal: item.val })}
+                    className={`py-2 px-1 text-center rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      (settings.scorePerGoal || 100) === item.val
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                        : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bonus Streak Beruntun */}
+            <div>
+              <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                Bonus Streak Jawaban Beruntun:
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '+10 Poin', val: 10 },
+                  { label: '+20 Poin (Standar)', val: 20 },
+                  { label: '+30 Poin', val: 30 },
+                  { label: '+50 Poin', val: 50 },
+                ].map((item) => (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => onUpdateSettings({ streakBonus: item.val })}
+                    className={`py-2 px-1 text-center rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      (settings.streakBonus || 20) === item.val
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                        : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                💡 Pemain akan mendapatkan tambahan bonus streak dikalikan dengan jumlah jawaban berturut-turut yang benar.
+              </p>
+            </div>
+          </section>
+
+          {/* SECTION 2: TAMPILAN KACA TRANSPARAN & UKURAN SOAL */}
+          <section className="bg-slate-950/70 border border-sky-500/30 rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <Eye className="w-4 h-4 text-sky-400" />
+              <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
+                2. Tingkat Transparansi Kaca & Ukuran Soal
+              </h4>
+            </div>
+
+            {/* Tingkat Transparansi Soal Jawaban */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  Tingkat Transparansi Kaca Bening Soal:
+                </label>
+                <span className="text-xs font-mono font-bold text-sky-300">
+                  {Math.round((settings.glassTransparency || 0.3) * 100)}% Kejernihan Kaca
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 mb-2.5">
+                {[
+                  { label: 'Sangat Bening (15%)', val: 0.15 },
+                  { label: 'Standar (30%)', val: 0.3 },
+                  { label: 'Semi (50%)', val: 0.5 },
+                  { label: 'Pekat (75%)', val: 0.75 },
+                  { label: 'Solid (95%)', val: 0.95 },
+                ].map((item) => (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => onUpdateSettings({ glassTransparency: item.val })}
+                    className={`py-1.5 px-1 text-center rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                      Math.abs((settings.glassTransparency || 0.3) - item.val) < 0.05
+                        ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-md shadow-sky-500/20 font-black'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Slider Manual */}
+              <input
+                type="range"
+                min="0.1"
+                max="0.95"
+                step="0.05"
+                value={settings.glassTransparency || 0.3}
+                onChange={(e) => onUpdateSettings({ glassTransparency: parseFloat(e.target.value) })}
+                className="w-full accent-sky-400 h-2 bg-slate-800 rounded-lg cursor-pointer"
+              />
+
+              {/* Mini Live Glass Preview Box */}
+              <div className="relative mt-2 p-3 rounded-2xl overflow-hidden border border-white/20 text-center shadow-lg bg-cover bg-center" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #0369A1, #0F172A)' }}>
+                <div
+                  className="rounded-xl p-2.5 border border-white/30 backdrop-blur-md transition-all shadow-md inline-block max-w-sm w-full"
+                  style={{
+                    backgroundColor: `rgba(255, 255, 255, ${settings.glassTransparency || 0.3})`,
+                  }}
+                >
+                  <span className="text-[10px] uppercase font-bold text-sky-200 block">
+                    Pratinjau Kaca Bening
+                  </span>
+                  <span className="text-xs font-black text-white drop-shadow">
+                    Contoh Teks Soal & Kartu Jawaban
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Besar Kecil Ukuran Soal Jawaban */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Type className="w-3.5 h-3.5 text-amber-400" />
+                <label className="text-xs font-bold text-slate-300">
+                  Besar Kecil Ukuran Teks & Kartu Soal Jawaban:
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: 'small' as const, label: 'Kecil', desc: 'Ukuran Compact' },
+                  { id: 'normal' as const, label: 'Sedang', desc: 'Ukuran Standar' },
+                  { id: 'large' as const, label: 'Besar', desc: 'Mudah Dibaca' },
+                  { id: 'xlarge' as const, label: 'Ekstra Besar', desc: 'Jarak Jauh / TV' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onUpdateSettings({ questionCardSize: item.id })}
+                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                      (settings.questionCardSize || 'normal') === item.id
+                        ? 'bg-amber-500/20 text-amber-200 border-amber-400 shadow-md shadow-amber-500/10'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    }`}
+                  >
+                    <span className="block font-black text-xs font-['Outfit'] text-white">
+                      {item.label}
+                    </span>
+                    <span className="text-[10px] opacity-75">{item.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION 3: PENGATURAN PERTANDINGAN & SENSOR */}
           <section className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-3">
               <Sliders className="w-4 h-4 text-sky-400" />
               <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
-                1. Pengaturan Pertandingan & Sensor AR
+                3. Durasi & Karakter Kiper 3D
               </h4>
             </div>
 
@@ -374,13 +577,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
-          {/* SECTION 2: IMPOR & UNDUH TEMPLATE SOAL */}
+          {/* SECTION 4: IMPOR & UNDUH TEMPLATE SOAL */}
           <section className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
                 <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
-                  2. Impor & Unduh Template Soal ({activeQuestionsCount} Soal Aktif)
+                  4. Impor & Unduh Template Soal ({activeQuestionsCount} Soal Aktif)
                 </h4>
               </div>
               <button
@@ -444,12 +647,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
-          {/* SECTION 3: 5 SOAL BAWAAN YANG TERPASANG */}
+          {/* SECTION 5: DAFTAR 5 SOAL BAWAAN STANDAR */}
           <section className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-2">
               <BookOpen className="w-4 h-4 text-amber-400" />
               <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
-                3. Daftar 5 Soal Bawaan Standar
+                5. Daftar 5 Soal Bawaan Standar
               </h4>
             </div>
             <p className="text-xs text-slate-400 mb-3">
@@ -499,12 +702,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
-          {/* SECTION 4: RIWAYAT REKOR SKOR */}
+          {/* SECTION 6: RIWAYAT REKOR SKOR */}
           <section className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-3">
               <Trophy className="w-4 h-4 text-amber-400" />
               <h4 className="text-sm font-extrabold text-white font-['Outfit'] uppercase tracking-wider">
-                4. Riwayat Rekor Skor
+                6. Riwayat Rekor Skor
               </h4>
             </div>
 

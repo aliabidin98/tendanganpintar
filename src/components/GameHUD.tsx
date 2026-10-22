@@ -13,7 +13,7 @@ import {
   Trophy,
   Footprints,
 } from 'lucide-react';
-import { GameMode, PlayerSessionState } from '../types/game';
+import { GameMode, PlayerSessionState, GameSettings } from '../types/game';
 
 interface GameHUDProps {
   mode: GameMode;
@@ -23,6 +23,7 @@ interface GameHUDProps {
   soundEnabled: boolean;
   showSkeleton: boolean;
   feetDetectedCount: number;
+  settings?: GameSettings;
   onToggleSound: () => void;
   onToggleCamera: () => void;
   onToggleSkeleton: () => void;
@@ -38,6 +39,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   soundEnabled,
   showSkeleton,
   feetDetectedCount,
+  settings,
   onToggleSound,
   onToggleCamera,
   onToggleSkeleton,
@@ -47,6 +49,47 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   const isTimeCritical = timeLeft <= 5 && timeLeft > 0;
   const p1 = players[0];
   const p2 = players[1];
+
+  const transparency = settings?.glassTransparency ?? 0.3;
+  const cardSize = settings?.questionCardSize ?? 'normal';
+
+  const sizeStyles = {
+    small: {
+      card: 'p-2 sm:p-3',
+      title: 'text-xs sm:text-sm font-extrabold',
+      sub: 'text-[10px]',
+      maxWidth: 'max-w-md',
+      btn: 'px-2.5 py-1 text-[10px]',
+    },
+    normal: {
+      card: 'p-3 sm:p-4 md:p-5',
+      title: 'text-sm sm:text-lg md:text-xl font-black',
+      sub: 'text-[11px]',
+      maxWidth: 'max-w-xl',
+      btn: 'px-3 py-1.5 text-xs',
+    },
+    large: {
+      card: 'p-4 sm:p-6',
+      title: 'text-base sm:text-xl md:text-2xl font-black',
+      sub: 'text-xs',
+      maxWidth: 'max-w-2xl',
+      btn: 'px-4 py-2 text-sm',
+    },
+    xlarge: {
+      card: 'p-5 sm:p-7 md:p-8',
+      title: 'text-lg sm:text-2xl md:text-3xl font-black',
+      sub: 'text-sm',
+      maxWidth: 'max-w-3xl',
+      btn: 'px-5 py-2.5 text-base',
+    },
+  }[cardSize];
+
+  const glassStyle: React.CSSProperties = {
+    backgroundColor: `rgba(255, 255, 255, ${transparency})`,
+    borderColor: `rgba(255, 255, 255, ${Math.min(1, transparency + 0.35)})`,
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+  };
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-2 sm:p-4 md:p-5 select-none">
@@ -197,38 +240,44 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* QUESTION BOARDS AREA - Bening Kaca Transparan (Liquid Glassmorphism) */}
       {mode === '2P' && p1 && p2 ? (
         /* 2-Player Split Question Boards */
-        <div className="grid grid-cols-2 gap-3 w-full px-1">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full px-1">
           {/* Player 1 Question Board (Left) - Glass */}
-          <div className="relative overflow-hidden backdrop-blur-xl bg-white/12 border border-white/30 rounded-2xl p-2.5 sm:p-3 text-center shadow-[0_8px_32px_0_rgba(0,0,0,0.35)] ring-1 ring-sky-400/40">
+          <div
+            style={glassStyle}
+            className={`relative overflow-hidden border rounded-2xl ${sizeStyles.card} text-center shadow-[0_8px_32px_0_rgba(0,0,0,0.35)] ring-1 ring-sky-400/40`}
+          >
             {/* Glass light sweep reflection */}
             <div className="absolute -top-12 -left-12 w-40 h-20 bg-white/20 rounded-full blur-lg pointer-events-none transform -rotate-12" />
 
             <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full backdrop-blur-md bg-sky-500/25 border border-sky-300/40 text-sky-200 text-[10px] font-black uppercase mb-1">
               <span>🔵 PEMAIN 1</span>
             </div>
-            <h2 className="text-xs sm:text-base font-black text-white font-['Outfit'] leading-tight line-clamp-2 drop-shadow-md">
+            <h2 className={`${sizeStyles.title} text-white font-['Outfit'] leading-tight line-clamp-2 drop-shadow-md`}>
               {p1.currentQuestion?.question || 'Menyiapkan soal...'}
             </h2>
             {p1.streak > 1 && (
-              <span className="text-[10px] text-amber-300 font-bold block mt-0.5">
+              <span className={`${sizeStyles.sub} text-amber-300 font-bold block mt-0.5`}>
                 🔥 Streak x{p1.streak}!
               </span>
             )}
           </div>
 
           {/* Player 2 Question Board (Right) - Glass */}
-          <div className="relative overflow-hidden backdrop-blur-xl bg-white/12 border border-white/30 rounded-2xl p-2.5 sm:p-3 text-center shadow-[0_8px_32px_0_rgba(0,0,0,0.35)] ring-1 ring-amber-400/40">
+          <div
+            style={glassStyle}
+            className={`relative overflow-hidden border rounded-2xl ${sizeStyles.card} text-center shadow-[0_8px_32px_0_rgba(0,0,0,0.35)] ring-1 ring-amber-400/40`}
+          >
             {/* Glass light sweep reflection */}
             <div className="absolute -top-12 -left-12 w-40 h-20 bg-white/20 rounded-full blur-lg pointer-events-none transform -rotate-12" />
 
             <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full backdrop-blur-md bg-amber-500/25 border border-amber-300/40 text-amber-200 text-[10px] font-black uppercase mb-1">
               <span>🟠 PEMAIN 2</span>
             </div>
-            <h2 className="text-xs sm:text-base font-black text-white font-['Outfit'] leading-tight line-clamp-2 drop-shadow-md">
+            <h2 className={`${sizeStyles.title} text-white font-['Outfit'] leading-tight line-clamp-2 drop-shadow-md`}>
               {p2.currentQuestion?.question || 'Menyiapkan soal...'}
             </h2>
             {p2.streak > 1 && (
-              <span className="text-[10px] text-amber-300 font-bold block mt-0.5">
+              <span className={`${sizeStyles.sub} text-amber-300 font-bold block mt-0.5`}>
                 🔥 Streak x{p2.streak}!
               </span>
             )}
@@ -237,8 +286,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       ) : (
         /* 1-Player Single Large Question Board - Bening Kaca Transparan */
         p1 && (
-          <div className="mx-auto w-full max-w-xl px-2">
-            <div className="relative overflow-hidden backdrop-blur-2xl bg-white/12 border border-white/35 rounded-3xl p-3.5 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] text-center ring-1 ring-white/25">
+          <div className={`mx-auto w-full ${sizeStyles.maxWidth} px-2`}>
+            <div
+              style={glassStyle}
+              className={`relative overflow-hidden border rounded-3xl ${sizeStyles.card} shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] text-center ring-1 ring-white/25`}
+            >
               {/* Crystalline diagonal glass sheen */}
               <div className="absolute -top-16 -left-16 w-56 h-28 bg-white/25 rounded-full blur-xl pointer-events-none transform -rotate-12" />
               <div className="absolute -bottom-16 -right-16 w-56 h-28 bg-sky-400/15 rounded-full blur-xl pointer-events-none" />
@@ -246,10 +298,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full backdrop-blur-md bg-white/15 border border-white/30 text-sky-200 text-[11px] font-bold mb-1.5 shadow-sm">
                 <span>⚽ Soal Pengetahuan Umum</span>
               </div>
-              <h2 className="text-sm sm:text-lg md:text-xl font-black text-white font-['Outfit'] leading-tight mb-1.5 drop-shadow-md">
+              <h2 className={`${sizeStyles.title} text-white font-['Outfit'] leading-tight mb-1.5 drop-shadow-md`}>
                 {p1.currentQuestion ? p1.currentQuestion.question : 'Memuat soal berikutnya...'}
               </h2>
-              <p className="text-[11px] text-white/90 font-medium drop-shadow-sm">
+              <p className={`${sizeStyles.sub} text-white/90 font-medium drop-shadow-sm`}>
                 Tendang bola <strong className="text-sky-300">[A - KIRI]</strong> atau{' '}
                 <strong className="text-amber-300">[B - KANAN]</strong> dengan kaki Anda!
               </p>

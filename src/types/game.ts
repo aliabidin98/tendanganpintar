@@ -63,6 +63,10 @@ export type GameMode = '1P' | '2P';
 
 export type GoalkeeperCharacter = 'lion' | 'champion' | 'cyber';
 
+export type QuestionCardSize = 'small' | 'normal' | 'large' | 'xlarge';
+
+export type AppLicenseMode = 'DEMO' | 'FULL';
+
 export interface GameSettings {
   mode: GameMode;
   durationSeconds: number; // e.g. 15, 30, 60, 90
@@ -70,6 +74,10 @@ export interface GameSettings {
   showSkeleton: boolean;
   kickSensitivity: 'normal' | 'high';
   goalkeeperCharacter: GoalkeeperCharacter;
+  scorePerGoal: number; // 50, 100, 150, 200
+  streakBonus: number; // 10, 20, 30, 50
+  glassTransparency: number; // 0.15 (sangat bening) to 0.95 (solid)
+  questionCardSize: QuestionCardSize; // 'small' | 'normal' | 'large' | 'xlarge'
 }
 
 export interface GameScoreState {

@@ -412,7 +412,11 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
 
           if (isCorrect) {
             // GOAL SCORED!
-            player.score += 100 + player.streak * 20;
+            const basePts = settings.scorePerGoal || 100;
+            const streakPts = settings.streakBonus || 20;
+            const addedScore = basePts + player.streak * streakPts;
+
+            player.score += addedScore;
             player.streak += 1;
             player.highestStreak = Math.max(player.highestStreak, player.streak);
             player.goalsScored += 1;
@@ -432,7 +436,7 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
             player.feedback = {
               type: 'goal',
               text: 'GOOOL! JAWABAN BENAR!',
-              subText: `+${100 + (player.streak - 1) * 20} POIN`,
+              subText: `+${addedScore} POIN`,
               color: '#34D399',
               timer: 1.0,
             };
@@ -769,6 +773,8 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
             footPoints: feetPointsRef.current,
             players: playerGroups,
             showSkeleton: curSettings.showSkeleton,
+            glassTransparency: curSettings.glassTransparency,
+            questionCardSize: curSettings.questionCardSize,
           });
         }
       } catch (loopErr) {
@@ -839,6 +845,7 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
         soundEnabled={settings.soundEnabled}
         showSkeleton={settings.showSkeleton}
         feetDetectedCount={feetPoints.length}
+        settings={settings}
         onToggleSound={onToggleSound}
         onToggleCamera={handleToggleCamera}
         onToggleSkeleton={onToggleSkeleton}

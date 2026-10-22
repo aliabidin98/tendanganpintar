@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FootPoint, Ball, GoalkeeperState, GameMode, GoalkeeperCharacter } from '../types/game';
+import { FootPoint, Ball, GoalkeeperState, GameMode, GoalkeeperCharacter, QuestionCardSize } from '../types/game';
 import ballImgSrc from '../assets/images/soccer_ball_3d_1792623887459.jpg';
 import lionImgSrc from '../assets/images/goalkeeper_3d_lion_mascot_1792625120782.jpg';
 import champImgSrc from '../assets/images/goalkeeper_3d_champion_1792625039927.jpg';
@@ -36,6 +36,8 @@ export interface RenderState {
   allLandmarks?: { x: number; y: number; visibility: number }[];
   players: PlayerRenderGroup[];
   showSkeleton: boolean;
+  glassTransparency?: number;
+  questionCardSize?: QuestionCardSize;
 }
 
 export class ARCanvasRenderer {
@@ -274,7 +276,7 @@ export class ARCanvasRenderer {
     // 7. Render 3D Soccer Balls with Transparent Glass Floating Answer Cards
     players.forEach((player) => {
       player.balls.forEach((ball) => {
-        this.draw3DBallWithGlassCard(ctx, ball);
+        this.draw3DBallWithGlassCard(ctx, ball, state.glassTransparency, state.questionCardSize);
       });
     });
 
@@ -627,7 +629,12 @@ export class ARCanvasRenderer {
   }
 
   // Draw 3D Soccer Ball with Transparent Glass (Kaca Bening) Floating Answer Card
-  private draw3DBallWithGlassCard(ctx: CanvasRenderingContext2D, ball: Ball) {
+  private draw3DBallWithGlassCard(
+    ctx: CanvasRenderingContext2D,
+    ball: Ball,
+    transparency = 0.35,
+    size: QuestionCardSize = 'normal'
+  ) {
     if (ball.opacity <= 0) return;
 
     ctx.save();
@@ -736,52 +743,58 @@ export class ARCanvasRenderer {
     ctx.fillText(ball.optionLetter, 0, badgeY + 1);
 
     // 6. Floating Glassmorphism Transparent Answer Card (Bening Kaca Transparan)
-    const textW = Math.max(136, ball.label.length * 9.5 + 28);
-    const textH = 34;
-    const textY = ball.radius + 14;
+    const sizeMultiplier = size === 'small' ? 0.85 : size === 'large' ? 1.25 : size === 'xlarge' ? 1.45 : 1.0;
+    const fontPx = Math.round(13 * sizeMultiplier);
+    const textH = Math.round(34 * sizeMultiplier);
+    const textW = Math.max(Math.round(136 * sizeMultiplier), ball.label.length * (fontPx * 0.72) + Math.round(28 * sizeMultiplier));
+    const textY = ball.radius + Math.round(14 * sizeMultiplier);
 
-    // Liquid Glass Background (Translucent with light refraction)
+    // Liquid Glass Background (Configurable Transparency)
+    const alphaTop = Math.min(0.9, transparency * 0.85 + 0.1);
+    const alphaMid = Math.max(0.04, transparency * 0.35);
+    const alphaBot = Math.min(0.85, transparency * 0.65 + 0.05);
+
     const glassGrad = ctx.createLinearGradient(0, textY, 0, textY + textH);
-    glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.28)');
-    glassGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.10)');
-    glassGrad.addColorStop(1, 'rgba(255, 255, 255, 0.18)');
+    glassGrad.addColorStop(0, `rgba(255, 255, 255, ${alphaTop})`);
+    glassGrad.addColorStop(0.5, `rgba(255, 255, 255, ${alphaMid})`);
+    glassGrad.addColorStop(1, `rgba(255, 255, 255, ${alphaBot})`);
 
     ctx.fillStyle = glassGrad;
-    roundRect(ctx, -textW / 2, textY, textW, textH, 10);
+    roundRect(ctx, -textW / 2, textY, textW, textH, Math.round(10 * sizeMultiplier));
     ctx.fill();
 
     // Crystalline Specular Border
     const borderGrad = ctx.createLinearGradient(-textW / 2, textY, textW / 2, textY + textH);
-    borderGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    borderGrad.addColorStop(0, `rgba(255, 255, 255, ${Math.min(1, transparency + 0.5)})`);
     borderGrad.addColorStop(
       0.5,
-      ball.optionLetter === 'A' ? 'rgba(56, 189, 248, 0.7)' : 'rgba(251, 191, 36, 0.7)'
+      ball.optionLetter === 'A' ? 'rgba(56, 189, 248, 0.8)' : 'rgba(251, 191, 36, 0.8)'
     );
-    borderGrad.addColorStop(1, 'rgba(255, 255, 255, 0.35)');
+    borderGrad.addColorStop(1, `rgba(255, 255, 255, ${Math.min(0.8, transparency + 0.2)})`);
     ctx.strokeStyle = borderGrad;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = Math.max(1.5, 1.8 * sizeMultiplier);
     ctx.stroke();
 
     // Top subtle reflection streak (Glass shine)
     ctx.save();
     ctx.beginPath();
-    roundRect(ctx, -textW / 2 + 1, textY + 1, textW - 2, textH * 0.45, 9);
+    roundRect(ctx, -textW / 2 + 1, textY + 1, textW - 2, textH * 0.45, Math.round(9 * sizeMultiplier));
     ctx.clip();
     const shineGrad = ctx.createLinearGradient(0, textY, 0, textY + textH * 0.45);
-    shineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+    shineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
     shineGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
     ctx.fillStyle = shineGrad;
     ctx.fill();
     ctx.restore();
 
     // High contrast crisp text inside glass card with subtle shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
     ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 1;
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '800 13px Outfit, sans-serif';
+    ctx.font = `800 ${fontPx}px Outfit, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(ball.label, 0, textY + textH / 2);
