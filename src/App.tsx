@@ -8,7 +8,8 @@ import { StartScreen } from './components/StartScreen';
 import { CameraARView } from './components/CameraARView';
 import { GameOverModal } from './components/GameOverModal';
 import { getStoredQuestions } from './game/questionManager';
-import { GameSettings, GameMode, QuizQuestion, PlayerSessionState } from './types/game';
+import { QuizQuestion, GameSettings, GameMode, PlayerSessionState } from './types/game';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const HIGH_SCORE_1P_KEY = 'ar_sports_hero_highscore_1p';
 const HIGH_SCORE_2P_KEY = 'ar_sports_hero_highscore_2p';
@@ -151,32 +152,32 @@ export default function App() {
       )}
 
       {gameState === 'PLAYING' && (
-        <CameraARView
-          settings={settings}
-          questionBank={activeQuestions}
-          onGameFinished={handleGameFinished}
-          onQuit={() => setGameState('MENU')}
-          onToggleSound={() =>
-            setSettings((prev) => ({ ...prev, soundEnabled: !prev.soundEnabled }))
-          }
-          onToggleSkeleton={() =>
-            setSettings((prev) => ({ ...prev, showSkeleton: !prev.showSkeleton }))
-          }
-        />
+        <ErrorBoundary
+          fallbackTitle="Kendala Sesi AR Game"
+          fallbackMessage="Terjadi kendala saat memproses kamera atau sensor pose tubuh AR. Anda dapat kembali ke menu utama atau memulai ulang."
+          onReset={() => setGameState('MENU')}
+          resetLabel="Kembali ke Menu Utama"
+        >
+          <CameraARView
+            settings={settings}
+            questionBank={activeQuestions}
+            onGameFinished={handleGameFinished}
+            onQuit={() => setGameState('MENU')}
+            onToggleSound={() =>
+              setSettings((prev) => ({ ...prev, soundEnabled: !prev.soundEnabled }))
+            }
+            onToggleSkeleton={() =>
+              setSettings((prev) => ({ ...prev, showSkeleton: !prev.showSkeleton }))
+            }
+          />
+        </ErrorBoundary>
       )}
 
       {gameState === 'GAME_OVER' && (
-        <>
-          <div className="opacity-20 pointer-events-none filter blur-sm">
-            <CameraARView
-              settings={settings}
-              questionBank={activeQuestions}
-              onGameFinished={() => {}}
-              onQuit={() => {}}
-              onToggleSound={() => {}}
-              onToggleSkeleton={() => {}}
-            />
-          </div>
+        <div className="relative w-full h-screen overflow-hidden bg-slate-950 flex items-center justify-center">
+          {/* Ambient Stadium Glow Background */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.3),rgba(255,255,255,0))]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_100%,rgba(16,185,129,0.2),transparent)]" />
           <GameOverModal
             mode={settings.mode}
             players={finishedPlayers}
@@ -184,7 +185,7 @@ export default function App() {
             onPlayAgain={() => startGame(settings.mode)}
             onGoHome={() => setGameState('MENU')}
           />
-        </>
+        </div>
       )}
     </div>
   );
