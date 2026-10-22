@@ -216,28 +216,36 @@ export class ARCanvasRenderer {
     ctx.clearRect(0, 0, width, height);
 
     // 1. Video Background (Mirrored) or Synthetic Stadium Pitch
-    if (state.cameraActive && state.video && state.video.readyState >= 2) {
-      ctx.save();
-      // Mirror horizontally so player's right foot matches screen right
-      ctx.translate(width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(state.video, 0, 0, width, height);
-      ctx.restore();
+    let videoRendered = false;
+    if (state.cameraActive && state.video && state.video.readyState >= 2 && state.video.videoWidth > 0) {
+      try {
+        ctx.save();
+        // Mirror horizontally so player's right foot matches screen right
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(state.video, 0, 0, width, height);
+        ctx.restore();
 
-      // Atmospheric vignette
-      const vignette = ctx.createRadialGradient(
-        width / 2,
-        height / 2,
-        Math.min(width, height) * 0.35,
-        width / 2,
-        height / 2,
-        Math.max(width, height) * 0.85
-      );
-      vignette.addColorStop(0, 'rgba(15, 23, 42, 0.05)');
-      vignette.addColorStop(1, 'rgba(2, 6, 23, 0.6)');
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, width, height);
-    } else {
+        // Atmospheric vignette
+        const vignette = ctx.createRadialGradient(
+          width / 2,
+          height / 2,
+          Math.min(width, height) * 0.35,
+          width / 2,
+          height / 2,
+          Math.max(width, height) * 0.85
+        );
+        vignette.addColorStop(0, 'rgba(15, 23, 42, 0.05)');
+        vignette.addColorStop(1, 'rgba(2, 6, 23, 0.6)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, width, height);
+        videoRendered = true;
+      } catch (err) {
+        console.warn('Could not render video frame, falling back to pitch:', err);
+      }
+    }
+
+    if (!videoRendered) {
       this.drawSyntheticPitch(ctx, width, height);
     }
 
@@ -660,6 +668,17 @@ export class ARCanvasRenderer {
         ball.radius * 2,
         ball.radius * 2
       );
+    } else {
+      // Immediate 3D vector sphere so ball is never invisible while image decodes
+      const grad = ctx.createRadialGradient(-ball.radius * 0.35, -ball.radius * 0.35, 2, 0, 0, ball.radius);
+      grad.addColorStop(0, '#FFFFFF');
+      grad.addColorStop(0.4, '#F1F5F9');
+      grad.addColorStop(0.8, '#94A3B8');
+      grad.addColorStop(1, '#334155');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
 

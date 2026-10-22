@@ -8,8 +8,9 @@ import confetti from 'canvas-confetti';
 import { ARCanvasRenderer, PlayerRenderGroup } from '../game/canvasRenderer';
 import { PoseTrackerManager } from '../game/poseTracker';
 import { soundEngine } from '../game/audio';
-import { checkFootBallCollision, calculateKickScore } from '../game/collision';
+import { checkFootBallCollision } from '../game/collision';
 import { GameHUD } from './GameHUD';
+import { ErrorBoundary } from './ErrorBoundary';
 import {
   QuizQuestion,
   Ball,
@@ -17,6 +18,7 @@ import {
   GameSettings,
   PlayerSessionState,
   GoalkeeperState,
+  GameMode,
 } from '../types/game';
 
 interface CameraARViewProps {
@@ -28,7 +30,116 @@ interface CameraARViewProps {
   onToggleSkeleton: () => void;
 }
 
-export const CameraARView: React.FC<CameraARViewProps> = ({
+// Compute geometry and initial coordinates for balls and goalkeeper
+function computeArenaPositions(
+  player: PlayerSessionState,
+  mode: GameMode,
+  w: number,
+  h: number
+): { balls: Ball[]; goalkeeper: GoalkeeperState } {
+  const is2P = mode === '2P';
+  const isP1 = player.playerId === 'P1';
+
+  const safeW = Math.max(w, 400);
+  const safeH = Math.max(h, 400);
+
+  let goalX: number;
+  let goalW: number;
+  const goalY: number = Math.max(14, safeH * 0.07);
+  let goalH: number;
+
+  let ballXA: number;
+  let ballXB: number;
+  const ballY: number = safeH * 0.74;
+  let ballRadius: number;
+
+  if (!is2P) {
+    goalW = Math.min(safeW * 0.62, 500);
+    goalH = Math.min(safeH * 0.27, 175);
+    goalX = (safeW - goalW) / 2;
+
+    ballRadius = Math.max(38, Math.min(52, safeW * 0.055));
+    ballXA = safeW * 0.26;
+    ballXB = safeW * 0.74;
+  } else {
+    const halfW = safeW / 2;
+    goalW = Math.min(halfW * 0.76, 310);
+    goalH = Math.min(safeH * 0.25, 155);
+
+    ballRadius = Math.max(30, Math.min(44, halfW * 0.09));
+
+    if (isP1) {
+      goalX = halfW * 0.5 - goalW / 2;
+      ballXA = halfW * 0.28;
+      ballXB = halfW * 0.76;
+    } else {
+      goalX = halfW + halfW * 0.5 - goalW / 2;
+      ballXA = halfW + halfW * 0.24;
+      ballXB = halfW + halfW * 0.72;
+    }
+  }
+
+  const keeperBaseX = goalX + goalW / 2;
+  const keeperBaseY = goalY + goalH - 12;
+
+  const updatedKeeper: GoalkeeperState = {
+    ...player.goalkeeper,
+    x: keeperBaseX,
+    y: keeperBaseY,
+    baseX: keeperBaseX,
+    baseY: keeperBaseY,
+    targetX: keeperBaseX,
+    targetY: keeperBaseY,
+  };
+
+  const q = player.currentQuestion;
+  const balls: Ball[] = [
+    {
+      id: 'A',
+      optionLetter: 'A',
+      label: q ? q.optionA : 'A',
+      x: ballXA,
+      y: ballY,
+      baseX: ballXA,
+      baseY: ballY,
+      startX: ballXA,
+      startY: ballY,
+      radius: ballRadius,
+      isCorrect: q ? q.correctOption === 'A' : true,
+      state: 'idle',
+      vx: 0,
+      vy: 0,
+      scale: 1,
+      rotation: 0,
+      opacity: 1,
+      flightProgress: 0,
+    },
+    {
+      id: 'B',
+      optionLetter: 'B',
+      label: q ? q.optionB : 'B',
+      x: ballXB,
+      y: ballY,
+      baseX: ballXB,
+      baseY: ballY,
+      startX: ballXB,
+      startY: ballY,
+      radius: ballRadius,
+      isCorrect: q ? q.correctOption === 'B' : false,
+      state: 'idle',
+      vx: 0,
+      vy: 0,
+      scale: 1,
+      rotation: 0,
+      opacity: 1,
+      flightProgress: 0,
+    },
+  ];
+
+  return { balls, goalkeeper: updatedKeeper };
+}
+
+const CameraARViewInner: React.FC<CameraARViewProps> = ({
   settings,
   questionBank,
   onGameFinished,
@@ -85,15 +196,17 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
     return list[idx];
   }, []);
 
-  // Players Session States
+  // Players Session States - initialized immediately with valid arena coordinates
   const [players, setPlayers] = useState<PlayerSessionState[]>(() => {
-    const pool = questionBank.length > 0 ? questionBank : getNextRandomQuestion();
-    const p1Q = Array.isArray(pool) && pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : getNextRandomQuestion();
-    const p2Candidates = Array.isArray(pool) && pool.length > 1 ? pool.filter((q) => q.id !== p1Q.id) : pool;
-    const p2Q = Array.isArray(p2Candidates) && p2Candidates.length > 0
-      ? p2Candidates[Math.floor(Math.random() * p2Candidates.length)]
-      : getNextRandomQuestion(p1Q.id);
-    const initialP1: PlayerSessionState = {
+    const initW = typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 800;
+    const initH = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 600;
+
+    const pool = questionBank.length > 0 ? questionBank : [getNextRandomQuestion()];
+    const p1Q = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : getNextRandomQuestion();
+    const p2Candidates = pool.length > 1 ? pool.filter((q) => q.id !== p1Q.id) : pool;
+    const p2Q = p2Candidates.length > 0 ? p2Candidates[Math.floor(Math.random() * p2Candidates.length)] : getNextRandomQuestion(p1Q.id);
+
+    const rawP1: PlayerSessionState = {
       playerId: 'P1',
       name: 'Pemain 1',
       score: 0,
@@ -121,11 +234,18 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
       isKickingLocked: false,
     };
 
+    const initialP1Data = computeArenaPositions(rawP1, settings.mode, initW, initH);
+    const initialP1: PlayerSessionState = {
+      ...rawP1,
+      balls: initialP1Data.balls,
+      goalkeeper: initialP1Data.goalkeeper,
+    };
+
     if (settings.mode === '1P') {
       return [initialP1];
     }
 
-    const initialP2: PlayerSessionState = {
+    const rawP2: PlayerSessionState = {
       playerId: 'P2',
       name: 'Pemain 2',
       score: 0,
@@ -153,6 +273,13 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
       isKickingLocked: false,
     };
 
+    const initialP2Data = computeArenaPositions(rawP2, settings.mode, initW, initH);
+    const initialP2: PlayerSessionState = {
+      ...rawP2,
+      balls: initialP2Data.balls,
+      goalkeeper: initialP2Data.goalkeeper,
+    };
+
     return [initialP1, initialP2];
   });
 
@@ -165,113 +292,16 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
 
   // Layout calculations for Goal Nets, Goalkeepers, and Answer Balls
   const layoutArena = useCallback((w: number, h: number) => {
-    const is2P = settings.mode === '2P';
+    const safeW = Math.max(w, 400);
+    const safeH = Math.max(h, 400);
 
     setPlayers((prevList) => {
       return prevList.map((player) => {
-        const isP1 = player.playerId === 'P1';
-
-        // 1P vs 2P Goal geometry
-        let goalX: number;
-        let goalW: number;
-        let goalY: number = Math.max(14, h * 0.07);
-        let goalH: number;
-
-        let ballXA: number;
-        let ballXB: number;
-        let ballY: number = h * 0.74;
-        let ballRadius: number;
-
-        if (!is2P) {
-          // 1-Player Full Pitch
-          goalW = Math.min(w * 0.62, 500);
-          goalH = Math.min(h * 0.27, 175);
-          goalX = (w - goalW) / 2;
-
-          ballRadius = Math.max(38, Math.min(52, w * 0.055));
-          ballXA = w * 0.26;
-          ballXB = w * 0.74;
-        } else {
-          // 2-Player Split Screen
-          const halfW = w / 2;
-          goalW = Math.min(halfW * 0.76, 310);
-          goalH = Math.min(h * 0.25, 155);
-
-          ballRadius = Math.max(30, Math.min(44, halfW * 0.09));
-
-          if (isP1) {
-            goalX = halfW * 0.5 - goalW / 2;
-            ballXA = halfW * 0.28;
-            ballXB = halfW * 0.76;
-          } else {
-            goalX = halfW + halfW * 0.5 - goalW / 2;
-            ballXA = halfW + halfW * 0.24;
-            ballXB = halfW + halfW * 0.72;
-          }
-        }
-
-        // Goalkeeper positioned on goal line
-        const keeperBaseX = goalX + goalW / 2;
-        const keeperBaseY = goalY + goalH - 12;
-
-        const updatedKeeper: GoalkeeperState = {
-          ...player.goalkeeper,
-          x: keeperBaseX,
-          y: keeperBaseY,
-          baseX: keeperBaseX,
-          baseY: keeperBaseY,
-          targetX: keeperBaseX,
-          targetY: keeperBaseY,
-        };
-
-        const q = player.currentQuestion;
-        const balls: Ball[] = [
-          {
-            id: 'A',
-            optionLetter: 'A',
-            label: q ? q.optionA : 'A',
-            x: ballXA,
-            y: ballY,
-            baseX: ballXA,
-            baseY: ballY,
-            startX: ballXA,
-            startY: ballY,
-            radius: ballRadius,
-            isCorrect: q ? q.correctOption === 'A' : true,
-            state: 'idle',
-            vx: 0,
-            vy: 0,
-            scale: 1,
-            rotation: 0,
-            opacity: 1,
-            flightProgress: 0,
-          },
-          {
-            id: 'B',
-            optionLetter: 'B',
-            label: q ? q.optionB : 'B',
-            x: ballXB,
-            y: ballY,
-            baseX: ballXB,
-            baseY: ballY,
-            startX: ballXB,
-            startY: ballY,
-            radius: ballRadius,
-            isCorrect: q ? q.correctOption === 'B' : false,
-            state: 'idle',
-            vx: 0,
-            vy: 0,
-            scale: 1,
-            rotation: 0,
-            opacity: 1,
-            flightProgress: 0,
-          },
-        ];
-
+        const { balls, goalkeeper } = computeArenaPositions(player, settings.mode, safeW, safeH);
         return {
           ...player,
           balls,
-          goalkeeper: updatedKeeper,
+          goalkeeper,
         };
       });
     });
@@ -302,14 +332,14 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
       }
 
       const canvas = canvasRef.current;
-      const w = canvas ? canvas.width : 800;
+      const w = canvas ? canvas.width / (window.devicePixelRatio || 1) : 800;
       const is2P = settings.mode === '2P';
 
       // Determine goal coordinates for this player
       let goalNetX: number;
       let goalNetW: number;
-      let goalNetY: number = 70;
-      let goalNetH: number = 150;
+      const goalNetY: number = 70;
+      const goalNetH: number = 150;
 
       if (!is2P) {
         goalNetW = Math.min(w * 0.62, 500);
@@ -339,7 +369,7 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
         // Goalkeeper is beaten / dives wrong way!
         player.goalkeeper.state = 'beaten';
         player.goalkeeper.targetX = goalNetX + goalNetW / 2 - cornerOffset * 0.5;
-        player.goalkeeper.rotation = (ball.optionLetter === 'A' ? 0.35 : -0.35);
+        player.goalkeeper.rotation = ball.optionLetter === 'A' ? 0.35 : -0.35;
       } else {
         // Wrong answer -> Ball heads right towards Goalkeeper, Goalkeeper dives and CATCHES it!
         targetX = goalNetX + goalNetW / 2 + (ball.optionLetter === 'A' ? -25 : 25);
@@ -348,104 +378,79 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
         player.goalkeeper.state = 'diving';
         player.goalkeeper.targetX = targetX;
         player.goalkeeper.targetY = targetY;
-        player.goalkeeper.rotation = ball.optionLetter === 'A' ? -0.4 : 0.4;
+        player.goalkeeper.rotation = ball.optionLetter === 'A' ? -0.25 : 0.25;
       }
 
-      // Animate Ball Flight & Goalkeeper movement
-      const flightDuration = 650; // ms
+      // Trajectory animation
+      const startX = ball.startX;
+      const startY = ball.startY;
       const startTime = performance.now();
+      const flightDuration = 520; // ms
 
-      const animateFlight = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const t = Math.min(1.0, elapsed / flightDuration);
-        ball.flightProgress = t;
+      const animateFlight = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / flightDuration, 1);
+        ball.flightProgress = progress;
 
-        // Parabolic arc curve
-        const arc = Math.sin(t * Math.PI) * 110;
-        ball.x = ball.startX + (targetX - ball.startX) * t;
-        ball.y = ball.startY + (targetY - ball.startY) * t - arc;
+        // Ease-in flight with parabolic height peak
+        const t = progress;
+        ball.x = startX + (targetX - startX) * t;
+        const linearY = startY + (targetY - startY) * t;
+        const arc = Math.sin(t * Math.PI) * -110;
+        ball.y = linearY + arc;
+
+        // 3D Perspective scaling & spin
+        ball.scale = 1 - t * 0.48;
         ball.rotation += 0.28;
-        ball.scale = 1.0 - t * 0.42; // scales from 1.0 down to ~0.58 for 3D depth
 
-        // Smooth keeper dive towards target
-        player.goalkeeper.x += (player.goalkeeper.targetX - player.goalkeeper.x) * 0.12;
-
-        if (t < 1.0) {
+        if (progress < 1) {
           requestAnimationFrame(animateFlight);
         } else {
-          // Flight ended!
+          // Ball arrived at goal!
+          ball.state = isCorrect ? 'goal' : 'caught';
+          player.totalAttempts += 1;
+
           if (isCorrect) {
             // GOAL SCORED!
-            ball.state = 'scored';
+            player.score += 100 + player.streak * 20;
+            player.streak += 1;
+            player.highestStreak = Math.max(player.highestStreak, player.streak);
+            player.goalsScored += 1;
+
             soundEngine.playGoal();
-            try {
-              confetti({
-                particleCount: is2P ? 50 : 80,
-                spread: 60,
-                origin: { x: targetX / w, y: 0.35 },
-                colors: playerId === 'P1' ? ['#38BDF8', '#10B981', '#FFFFFF'] : ['#FB923C', '#FACC15', '#FFFFFF'],
-              });
-            } catch {
-              // ignore
-            }
+            soundEngine.playCheer();
 
-            const { points } = calculateKickScore(player.streak);
-            const newScore = player.score + points;
-            const newStreak = player.streak + 1;
-            const highestStreak = Math.max(player.highestStreak, newStreak);
-            const goalsScored = player.goalsScored + 1;
-            const totalAttempts = player.totalAttempts + 1;
+            // Trigger burst of celebration confetti
+            confetti({
+              particleCount: 50,
+              spread: 70,
+              origin: {
+                x: targetX / (canvas ? canvas.width / (window.devicePixelRatio || 1) : 800),
+                y: targetY / (canvas ? canvas.height / (window.devicePixelRatio || 1) : 600),
+              },
+            });
 
-            setPlayers((prev) =>
-              prev.map((p) => {
-                if (p.playerId !== playerId) return p;
-                return {
-                  ...p,
-                  score: newScore,
-                  streak: newStreak,
-                  highestStreak,
-                  goalsScored,
-                  totalAttempts,
-                  feedback: {
-                    text: 'GOAL! ⚽',
-                    subText: `+${points} Poin`,
-                    color: '#4ade80',
-                    timer: 1.0,
-                    type: 'goal',
-                  },
-                };
-              })
-            );
+            player.feedback = {
+              type: 'goal',
+              text: 'GOOOL! JAWABAN BENAR!',
+              subText: `+${100 + (player.streak - 1) * 20} POIN`,
+              timer: 1.0,
+            };
           } else {
-            // CAUGHT BY GOALKEEPER! (DITANGKAP KIPER)
-            ball.state = 'missed';
+            // CAUGHT BY GOALKEEPER!
+            player.streak = 0;
             player.goalkeeper.state = 'caught';
-            player.goalkeeper.armAngleL = -0.9;
-            player.goalkeeper.armAngleR = 0.9;
+            soundEngine.playCatch();
 
-            soundEngine.playGloveCatch();
-            setTimeout(() => soundEngine.playMiss(), 180);
-
-            const totalAttempts = player.totalAttempts + 1;
-
-            setPlayers((prev) =>
-              prev.map((p) => {
-                if (p.playerId !== playerId) return p;
-                return {
-                  ...p,
-                  streak: 0,
-                  totalAttempts,
-                  feedback: {
-                    text: 'DITANGKAP KIPER! 🧤',
-                    subText: 'Jawaban Salah!',
-                    color: '#f87171',
-                    timer: 1.0,
-                    type: 'caught',
-                  },
-                };
-              })
-            );
+            player.feedback = {
+              type: 'caught',
+              text: 'DITANGKAP PENJAGA GAWANG 3D!',
+              subText: `Jawaban Salah: ${ball.label}`,
+              timer: 1.0,
+            };
           }
+
+          setPlayers([...playersRef.current]);
 
           // Advance to next random question after pause
           setTimeout(() => {
@@ -493,25 +498,38 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
   const executeKickRef = useRef(executeKick);
   executeKickRef.current = executeKick;
 
-  // Resize listener
+  // Responsive Resize and Layout Observer
   useEffect(() => {
     const handleResize = () => {
       if (!canvasRef.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
+      const w = Math.max(rect.width || 0, containerRef.current.clientWidth || 0, window.innerWidth || 800);
+      const h = Math.max(rect.height || 0, containerRef.current.clientHeight || 0, window.innerHeight || 600);
       const dpr = window.devicePixelRatio || 1;
-      canvasRef.current.width = rect.width * dpr;
-      canvasRef.current.height = rect.height * dpr;
+
+      canvasRef.current.width = Math.floor(w * dpr);
+      canvasRef.current.height = Math.floor(h * dpr);
 
       const ctx = canvasRef.current.getContext('2d');
       if (ctx) ctx.scale(dpr, dpr);
 
-      trackerRef.current?.updateCanvasDimensions(rect.width, rect.height);
-      layoutArena(rect.width, rect.height);
+      trackerRef.current?.updateCanvasDimensions(w, h);
+      layoutArena(w, h);
     };
 
     handleResize();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => handleResize());
+      ro.observe(containerRef.current);
+    }
+
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      ro?.disconnect();
+    };
   }, [layoutArena]);
 
   // Match countdown timer
@@ -536,7 +554,6 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
   // Keyboard shortcut triggers:
   // P1: [Q]/[A] (Kick A), [W]/[S] (Kick B)
   // P2: [O]/[K] (Kick A), [P]/[L] (Kick B)
-  // Or standard arrow keys for 1P
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const is2P = settingsRef.current.mode === '2P';
@@ -567,7 +584,7 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Initialize MediaPipe Pose and Camera Stream (Mounts ONCE, completely decoupled from UI updates)
+  // Initialize MediaPipe Pose and Camera Stream (Mounts ONCE)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -576,8 +593,8 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
     trackerRef.current = tracker;
 
     const rect = containerRef.current?.getBoundingClientRect();
-    const w = rect?.width || 800;
-    const h = rect?.height || 600;
+    const w = Math.max(rect?.width || 0, containerRef.current?.clientWidth || 0, window.innerWidth || 800);
+    const h = Math.max(rect?.height || 0, containerRef.current?.clientHeight || 0, window.innerHeight || 600);
 
     let isMounted = true;
 
@@ -650,7 +667,7 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
     };
   }, []);
 
-  // 60FPS Game Render Loop (Independent lifecycle, zero camera interruptions)
+  // 60FPS Game Render Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -661,87 +678,100 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
     let lastTime = performance.now();
 
     const loop = (currentTime: number) => {
-      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
-      lastTime = currentTime;
+      try {
+        const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+        lastTime = currentTime;
 
-      const ctx = canvas.getContext('2d');
-      const bounding = containerRef.current?.getBoundingClientRect();
-      const width = bounding?.width || 800;
-      const height = bounding?.height || 600;
-      const curSettings = settingsRef.current;
+        const ctx = canvas.getContext('2d');
+        const bounding = containerRef.current?.getBoundingClientRect();
+        const width = Math.max(bounding?.width || 0, containerRef.current?.clientWidth || 0, window.innerWidth || 800);
+        const height = Math.max(bounding?.height || 0, containerRef.current?.clientHeight || 0, window.innerHeight || 600);
+        const curSettings = settingsRef.current;
+        const dpr = window.devicePixelRatio || 1;
 
-      if (ctx && rendererRef.current) {
-        // Goalkeeper idle swaying & breathing
-        playersRef.current.forEach((player) => {
-          const keeper = player.goalkeeper;
-          if (keeper.state === 'idle') {
-            const sway = Math.sin(currentTime * 0.0035 + (player.playerId === 'P1' ? 0 : 2)) * 14;
-            keeper.x = keeper.baseX + sway;
-            keeper.armAngleL = 0.4 + Math.sin(currentTime * 0.004) * 0.08;
-            keeper.armAngleR = -0.4 - Math.sin(currentTime * 0.004) * 0.08;
-          }
+        // Auto-correct canvas resolution if mismatch
+        const targetW = Math.floor(width * dpr);
+        const targetH = Math.floor(height * dpr);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+          if (ctx) ctx.scale(dpr, dpr);
+        }
 
-          // Idle ball hover
-          player.balls.forEach((ball) => {
-            if (ball.state === 'idle') {
-              ball.y = ball.baseY + Math.sin(currentTime * 0.004 + (ball.id === 'A' ? 0 : 1.5)) * 5;
+        if (ctx && rendererRef.current) {
+          // Goalkeeper idle swaying & breathing
+          playersRef.current.forEach((player) => {
+            const keeper = player.goalkeeper;
+            if (keeper.state === 'idle') {
+              const sway = Math.sin(currentTime * 0.0035 + (player.playerId === 'P1' ? 0 : 2)) * 14;
+              keeper.x = keeper.baseX + sway;
+              keeper.armAngleL = 0.4 + Math.sin(currentTime * 0.004) * 0.08;
+              keeper.armAngleR = -0.4 - Math.sin(currentTime * 0.004) * 0.08;
+            }
+
+            // Idle ball hover
+            player.balls.forEach((ball) => {
+              if (ball.state === 'idle') {
+                ball.y = ball.baseY + Math.sin(currentTime * 0.004 + (ball.id === 'A' ? 0 : 1.5)) * 5;
+              }
+            });
+
+            // Feedback timer decay
+            if (player.feedback) {
+              player.feedback.timer = Math.max(0, player.feedback.timer - dt * 0.85);
             }
           });
 
-          // Feedback timer decay
-          if (player.feedback) {
-            player.feedback.timer = Math.max(0, player.feedback.timer - dt * 0.85);
-          }
-        });
+          // Prepare player render groups
+          const is2P = curSettings.mode === '2P';
+          const playerGroups: PlayerRenderGroup[] = playersRef.current.map((p) => {
+            const goalW = is2P ? Math.min((width / 2) * 0.76, 310) : Math.min(width * 0.62, 500);
+            const goalH = is2P ? Math.min(height * 0.25, 155) : Math.min(height * 0.27, 175);
+            const goalX = !is2P
+              ? (width - goalW) / 2
+              : p.playerId === 'P1'
+              ? (width / 2) * 0.5 - goalW / 2
+              : width / 2 + (width / 2) * 0.5 - goalW / 2;
+            const goalY = Math.max(14, height * 0.07);
 
-        // Prepare player render groups
-        const is2P = curSettings.mode === '2P';
-        const playerGroups: PlayerRenderGroup[] = playersRef.current.map((p) => {
-          let goalW = is2P ? Math.min((width / 2) * 0.76, 310) : Math.min(width * 0.62, 500);
-          let goalH = is2P ? Math.min(height * 0.25, 155) : Math.min(height * 0.27, 175);
-          let goalX = !is2P
-            ? (width - goalW) / 2
-            : p.playerId === 'P1'
-            ? (width / 2) * 0.5 - goalW / 2
-            : width / 2 + (width / 2) * 0.5 - goalW / 2;
-          let goalY = Math.max(14, height * 0.07);
+            const pChar =
+              p.playerId === 'P1'
+                ? curSettings.goalkeeperCharacter || 'lion'
+                : curSettings.goalkeeperCharacter === 'cyber'
+                ? 'lion'
+                : 'cyber';
 
-          // Differentiate goalkeeper in 2P mode so each goal has distinct character
-          const pChar =
-            p.playerId === 'P1'
-              ? curSettings.goalkeeperCharacter || 'lion'
-              : curSettings.goalkeeperCharacter === 'cyber'
-              ? 'lion'
-              : 'cyber';
+            return {
+              playerId: p.playerId,
+              name: p.name,
+              themeColor: p.playerId === 'P1' ? '#38BDF8' : '#FB923C',
+              accentColor: p.playerId === 'P1' ? '#0284C7' : '#EA580C',
+              balls: p.balls,
+              goalkeeper: p.goalkeeper,
+              goalNet: { x: goalX, y: goalY, w: goalW, h: goalH },
+              goalCelebrationTime: p.feedback?.type === 'goal' ? p.feedback.timer : 0,
+              missCelebrationTime: p.feedback?.type === 'caught' ? p.feedback.timer : 0,
+              celebrationText: p.feedback?.text,
+              subText: p.feedback?.subText,
+              streak: p.streak,
+              activeKickFoot: activeKickFootRef.current[p.playerId],
+              goalkeeperCharacter: pChar,
+            };
+          });
 
-          return {
-            playerId: p.playerId,
-            name: p.name,
-            themeColor: p.playerId === 'P1' ? '#38BDF8' : '#FB923C',
-            accentColor: p.playerId === 'P1' ? '#0284C7' : '#EA580C',
-            balls: p.balls,
-            goalkeeper: p.goalkeeper,
-            goalNet: { x: goalX, y: goalY, w: goalW, h: goalH },
-            goalCelebrationTime: p.feedback?.type === 'goal' ? p.feedback.timer : 0,
-            missCelebrationTime: p.feedback?.type === 'caught' ? p.feedback.timer : 0,
-            celebrationText: p.feedback?.text,
-            subText: p.feedback?.subText,
-            streak: p.streak,
-            activeKickFoot: activeKickFootRef.current[p.playerId],
-            goalkeeperCharacter: pChar,
-          };
-        });
-
-        rendererRef.current.render(ctx, {
-          width,
-          height,
-          mode: curSettings.mode,
-          video: videoRef.current,
-          cameraActive: cameraActiveRef.current,
-          footPoints: feetPointsRef.current,
-          players: playerGroups,
-          showSkeleton: curSettings.showSkeleton,
-        });
+          rendererRef.current.render(ctx, {
+            width,
+            height,
+            mode: curSettings.mode,
+            video: videoRef.current,
+            cameraActive: cameraActiveRef.current,
+            footPoints: feetPointsRef.current,
+            players: playerGroups,
+            showSkeleton: curSettings.showSkeleton,
+          });
+        }
+      } catch (loopErr) {
+        console.error('AR Game render loop error:', loopErr);
       }
 
       animationFrameId = requestAnimationFrame(loop);
@@ -786,7 +816,7 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen overflow-hidden bg-slate-950 flex items-center justify-center select-none"
+      className="relative w-full h-full min-h-screen overflow-hidden bg-slate-950 flex items-center justify-center select-none"
     >
       {/* Hidden camera video element */}
       <video ref={videoRef} playsInline muted autoPlay className="hidden" />
@@ -815,5 +845,19 @@ export const CameraARView: React.FC<CameraARViewProps> = ({
         onSimulateKick={(pId, opt) => executeKick(pId, opt)}
       />
     </div>
+  );
+};
+
+// Export CameraARView guarded by ErrorBoundary as requested
+export const CameraARView: React.FC<CameraARViewProps> = (props) => {
+  return (
+    <ErrorBoundary
+      fallbackTitle="Kendala Memuat Sesi Game AR"
+      fallbackMessage="Terjadi kendala saat memproses tampilan AR, sensor kamera, atau grafis pertandingan. Silakan coba kembali ke menu utama atau muat ulang."
+      onReset={props.onQuit}
+      resetLabel="Kembali ke Menu Utama"
+    >
+      <CameraARViewInner {...props} />
+    </ErrorBoundary>
   );
 };
