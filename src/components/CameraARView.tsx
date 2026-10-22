@@ -407,7 +407,7 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
           requestAnimationFrame(animateFlight);
         } else {
           // Ball arrived at goal!
-          ball.state = isCorrect ? 'goal' : 'caught';
+          ball.state = isCorrect ? 'scored' : 'missed';
           player.totalAttempts += 1;
 
           if (isCorrect) {
@@ -418,7 +418,6 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
             player.goalsScored += 1;
 
             soundEngine.playGoal();
-            soundEngine.playCheer();
 
             // Trigger burst of celebration confetti
             confetti({
@@ -434,18 +433,20 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
               type: 'goal',
               text: 'GOOOL! JAWABAN BENAR!',
               subText: `+${100 + (player.streak - 1) * 20} POIN`,
+              color: '#34D399',
               timer: 1.0,
             };
           } else {
             // CAUGHT BY GOALKEEPER!
             player.streak = 0;
             player.goalkeeper.state = 'caught';
-            soundEngine.playCatch();
+            soundEngine.playGloveCatch();
 
             player.feedback = {
               type: 'caught',
               text: 'DITANGKAP PENJAGA GAWANG 3D!',
               subText: `Jawaban Salah: ${ball.label}`,
+              color: '#F87171',
               timer: 1.0,
             };
           }
