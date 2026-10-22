@@ -1,0 +1,8 @@
+{
+  "name": "AR Tendangan Pintar",
+  "description": "Game AR interaktif edukasi sepak bola dengan AI MediaPipe Pose tracking untuk menjawab soal kuis secara kinestetik real-time.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

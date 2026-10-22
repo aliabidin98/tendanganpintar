@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR EduKick - Belajar Sambil Menendang</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Inter:wght@400;600;800&display=swap');
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #1a202c; 
+            font-family: 'Inter', sans-serif; 
+            touch-action: none; /* Mencegah scroll di mobile */
+        }
+        h1, h2, .game-font { font-family: 'Fredoka One', cursive; }
+        
+        /* Video disembunyikan tapi tetap aktif untuk diambil framenya */
+        #input_video {
+            position: absolute;
+            opacity: 0;
+            width: 10px;
+            height: 10px;
+            pointer-events: none;
+            z-index: -1;
+        }
+        #output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            display: block;
+        }
+        
+        .overlay-ui {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,248,255,0.95) 100%);
+            border: 4px solid #3b82f6;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Video element (hidden) -->
+    <video id="input_video" playsinline></video>
+
+    <!-- Canvas untuk Game dan AR Overlay -->
+    <canvas id="output_canvas"></canvas>
+
+    <!-- UI Layer (HTML di atas Canvas) -->
+    <div id="ui-container" class="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none p-4">
+        
+        <!-- Layar Mulai -->
+        <div id="start-screen" class="overlay-ui p-8 rounded-3xl shadow-2xl text-center pointer-events-auto max-w-md w-full transform transition-all">
+            <h1 class="text-4xl font-bold mb-2 text-blue-600 drop-shadow-sm">AR EduKick</h1>
+            <h2 class="text-xl font-bold mb-6 text-orange-500">Matematika Seru!</h2>
+            
+            <div class="bg-blue-50 p-4 rounded-xl mb-6 text-left border border-blue-100">
+                <p class="text-sm text-gray-700 mb-2 font-semibold">⚽ Cara Bermain:</p>
+                <ol class="text-sm text-gray-600 list-decimal pl-5 space-y-1">
+                    <li>Izinkan akses kamera.</li>
+                    <li>Mundur agar seluruh tubuh (terutama kaki) terlihat di kamera.</li>
+                    <li>Jawab soal yang muncul dengan "menendang" bola jawaban yang benar.</li>
+                    <li>Kumpulkan poin sebanyak-banyaknya dalam 30 detik!</li>
+                </ol>
+            </div>
+
+            <button id="start-btn" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-full text-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                Mulai Main
+            </button>
+        </div>
+        
+        <!-- Layar Loading AI -->
+        <div id="loading-screen" class="hidden overlay-ui p-8 rounded-3xl shadow-2xl text-center pointer-events-auto max-w-sm w-full">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mx-auto mb-6"></div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Memuat AI Model...</h2>
+            <p class="text-gray-600">Mohon tunggu, sedang menyiapkan deteksi gerakan. Pastikan wajah dan tubuh Anda terlihat.</p>
+        </div>
+        
+        <!-- Layar Game Over -->
+        <div id="game-over-screen" class="hidden overlay-ui p-8 rounded-3xl shadow-2xl text-center pointer-events-auto max-w-md w-full">
+            <h1 class="text-4xl font-bold mb-2 text-red-500">Waktu Habis!</h1>
+            <div class="my-6 bg-yellow-100 border-4 border-yellow-400 rounded-2xl p-6">
+                <p class="text-lg text-gray-700 font-semibold mb-1">Skor Akhir Kamu:</p>
+                <p id="final-score" class="text-6xl font-black text-yellow-600 drop-shadow-md">0</p>
+            </div>
+            <button id="restart-btn" class="w-full bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-bold py-4 px-6 rounded-full text-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                Main Lagi
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const ctx = canvasElement.getContext('2d');
+        
+        const uiContainer = document.getElementById('ui-container');
+        const startScreen = document.getElementById('start-screen');
+        const loadingScreen = document.getElementById('loading-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        
+        // Game State
+        let gameState = 'start'; // 'start', 'loading', 'playing', 'gameover'
+        let score = 0;
+        let timeLeft = 30;
+        let timerInterval;
+        let isAiReady = false;
+        
+        // Quiz State
+        let currentQuestion = null;
+        let cooldownTimer = 0;
+        let feedbackText = "";
+        let feedbackTimer = 0;
+        let feedbackColor = "";
+
+        // Posisi Bola (Relatif terhadap canvas)
+        const balls = [
+            { id: 0, xRatio: 0.25, yRatio: 0.8 }, // Bola Kiri
+            { id: 1, xRatio: 0.75, yRatio: 0.8 }  // Bola Kanan
+        ];
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            try {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                if (type === 'correct') {
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // Nada dasar
+                    oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1); // Naik (Ting!)
+                    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.4);
+                } else if (type === 'wrong') {
+                    oscillator.type = 'sawtooth';
+                    oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.2); // Turun (Teet!)
+                    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.3);
+                }
+            } catch (e) {
+                console.log("Audio failed", e);
+            }
+        }
+
+        function resizeCanvas() {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial resize
+
+        function generateQuestion() {
+            const types = ['+', '-'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            let a, b, ans;
+            
+            if(type === '+') {
+                a = Math.floor(Math.random() * 10) + 1;
+                b = Math.floor(Math.random() * 10) + 1;
+                ans = a + b;
+            } else {
+                a = Math.floor(Math.random() * 15) + 5;
+                b = Math.floor(Math.random() * a);
+                ans = a - b;
+            }
+            
+            // Buat jawaban salah yang masuk akal
+            let wrongAns = ans + Math.floor(Math.random() * 5) + 1;
+            if(Math.random() > 0.5 && ans > 2) wrongAns = ans - (Math.floor(Math.random() * 3) + 1);
+            if(wrongAns === ans) wrongAns += 1;
+            
+            // Acak posisi jawaban benar (kiri atau kanan)
+            const isLeftCorrect = Math.random() > 0.5;
+            const options = isLeftCorrect ? [ans, wrongAns] : [wrongAns, ans];
+            const answerIndex = isLeftCorrect ? 0 : 1;
+            
+            return { q: `${a} ${type} ${b} = ?`, options, answerIndex };
+        }
+
+        function startGame() {
+            score = 0;
+            timeLeft = 30;
+            gameState = 'playing';
+            currentQuestion = generateQuestion();
+            cooldownTimer = 0;
+            
+            // Start Timer
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if(gameState === 'playing') {
+                    timeLeft--;
+                    if(timeLeft <= 0) {
+                        endGame();
+                    }
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            gameState = 'gameover';
+            clearInterval(timerInterval);
+            document.getElementById('final-score').innerText = score;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function handleAnswer(selectedIndex) {
+            if (cooldownTimer > 0 || gameState !== 'playing') return;
+            
+            if (selectedIndex === currentQuestion.answerIndex) {
+                // Benar
+                score += 10;
+                playSound('correct');
+                feedbackText = "GOAL! +10";
+                feedbackColor = "#4ade80"; // Hijau
+            } else {
+                // Salah
+                playSound('wrong');
+                feedbackText = "SALAH!";
+                feedbackColor = "#f87171"; // Merah
+            }
+            
+            feedbackTimer = 30; // Tampilkan feedback selama 30 frame
+            cooldownTimer = 60; // Cooldown 1 detik (asumsi 60fps) agar tidak double klik
+            
+            // Generate soal baru setelah delay sedikit
+            setTimeout(() => {
+                if(gameState === 'playing') {
+                    currentQuestion = generateQuestion();
+                }
+            }, 500);
+        }
+
+        function drawGameUI() {
+            const w = canvasElement.width;
+            const h = canvasElement.height;
+            
+            // Gambar Tiang Gawang (Background)
+            drawGoalPost(w, h);
+
+            if (!currentQuestion) return;
+
+            // 1. Gambar Top Bar (Waktu & Skor)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, w, 80);
+            
+            ctx.font = 'bold 24px Inter';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`Waktu: ${timeLeft}s`, 20, 40);
+            
+            ctx.textAlign = 'right';
+            ctx.fillText(`Skor: ${score}`, w - 20, 40);
+
+            // 2. Gambar Pertanyaan
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            const qWidth = Math.min(w * 0.8, 400);
+            const qX = (w - qWidth) / 2;
+            const qY = 100;
+            const qHeight = 80;
+            
+            // Kotak Pertanyaan
+            ctx.beginPath();
+            ctx.roundRect(qX, qY, qWidth, qHeight, 20);
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#3b82f6';
+            ctx.stroke();
+            
+            ctx.font = 'bold 36px Fredoka One';
+            ctx.fillStyle = '#1e3a8a';
+            ctx.textAlign = 'center';
+            ctx.fillText(currentQuestion.q, w / 2, qY + qHeight / 2);
+
+            // 3. Gambar Bola Jawaban
+            const ballRadius = Math.min(w, h) * 0.12; // Ukuran bola responsif
+            
+            balls.forEach((ball, index) => {
+                const bx = w * ball.xRatio;
+                const by = h * ball.yRatio;
+                const text = currentQuestion.options[index];
+                
+                // Efek visual jika sedang cooldown dan ini jawaban yang ditebak
+                const isCooldown = cooldownTimer > 0;
+                drawSoccerBall(bx, by, ballRadius, text, isCooldown);
+            });
+
+            // 4. Gambar Feedback (GOAL/SALAH)
+            if (feedbackTimer > 0) {
+                ctx.font = 'bold 48px Fredoka One';
+                ctx.fillStyle = feedbackColor;
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
+                // Animasi naik
+                const animY = (h / 2) - ((30 - feedbackTimer) * 2);
+                ctx.fillText(feedbackText, w / 2, animY);
+                
+                // Reset shadow
+                ctx.shadowColor = 'transparent';
+                feedbackTimer--;
+            }
+
+            if(cooldownTimer > 0) cooldownTimer--;
+        }
+
+        function drawGoalPost(w, h) {
+            const gw = w * 0.9; // Lebar gawang
+            const gh = h * 0.6; // Tinggi gawang
+            const gx = (w - gw) / 2;
+            const gy = h * 0.3; // Mulai dari sepertiga layar
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            
+            // Efek Neon / Glow
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 15;
+
+            // Tiang Kiri, Kanan, Atas
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(gx, h); // Tiang kiri sampai bawah
+            ctx.lineTo(gx, gy); // Ke atas
+            ctx.lineTo(gx + gw, gy); // Mistar
+            ctx.lineTo(gx + gw, h); // Tiang kanan sampai bawah
+            ctx.stroke();
+
+            // Matikan shadow untuk jaring
+            ctx.shadowBlur = 0;
+
+            // Jaring Gawang (Grid samar)
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            const gridCount = 10;
+            
+            // Garis Horizontal Jaring
+            for(let i=1; i<=gridCount; i++) {
+                const y = gy + (gh * (i/gridCount));
+                ctx.beginPath();
+                ctx.moveTo(gx, y);
+                ctx.lineTo(gx + gw, y);
+                ctx.stroke();
+            }
+            // Garis Vertikal Jaring
+            for(let i=1; i<gridCount; i++) {
+                const x = gx + (gw * (i/gridCount));
+                ctx.beginPath();
+                ctx.moveTo(x, gy);
+                ctx.lineTo(x, h);
+                ctx.stroke();
+            }
+        }
+
+        function drawSoccerBall(x, y, r, text, isFaded) {
+            ctx.save();
+            ctx.globalAlpha = isFaded ? 0.5 : 1.0;
+            
+            // Bayangan bola
+            ctx.beginPath();
+            ctx.ellipse(x, y + r*0.8, r*0.8, r*0.2, 0, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fill();
+
+            // Dasar bola (Putih)
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            
+            // Garis tepi
+            ctx.lineWidth = Math.max(3, r * 0.05);
+            ctx.strokeStyle = '#333333';
+            ctx.stroke();
+            
+            // Motif bola sederhana (Segilima di tengah)
+            const pR = r * 0.4;
+            ctx.beginPath();
+            for(let i=0; i<5; i++) {
+                const angle = (i * 2 * Math.PI / 5) - Math.PI/2;
+                const px = x + pR * Math.cos(angle);
+                const py = y + pR * Math.sin(angle);
+                if(i===0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = '#333333';
+            ctx.fill();
+
+            // Garis dari segilima ke tepi
+            for(let i=0; i<5; i++) {
+                const angle = (i * 2 * Math.PI / 5) - Math.PI/2;
+                const px1 = x + pR * Math.cos(angle);
+                const py1 = y + pR * Math.sin(angle);
+                const px2 = x + r * Math.cos(angle);
+                const py2 = y + r * Math.sin(angle);
+                ctx.beginPath();
+                ctx.moveTo(px1, py1);
+                ctx.lineTo(px2, py2);
+                ctx.stroke();
+            }
+            
+            // Overlay Teks Jawaban (Background lingkaran hitam agar kontras)
+            ctx.beginPath();
+            ctx.arc(x, y, r*0.6, 0, 2*Math.PI);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#000000';
+            ctx.font = `bold ${r*0.6}px Fredoka One`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x, y);
+            
+            ctx.restore();
+        }
+
+        function checkCollisions(landmarks) {
+            if (cooldownTimer > 0 || gameState !== 'playing') return;
+
+            const w = canvasElement.width;
+            const h = canvasElement.height;
+            const ballRadius = Math.min(w, h) * 0.12;
+            const hitThreshold = ballRadius * 1.5; // Toleransi area tendangan diperbesar agar mudah
+
+            // Indeks landmark kaki dari MediaPipe Pose
+            // 31: Kaki Kiri Ujung (Left foot index)
+            // 32: Kaki Kanan Ujung (Right foot index)
+            // 27: Pergelangan Kiri (Left ankle)
+            // 28: Pergelangan Kanan (Right ankle)
+            const footIndices = [31, 32, 27, 28];
+
+            for (let i = 0; i < balls.length; i++) {
+                const ballX = w * balls[i].xRatio;
+                const ballY = h * balls[i].yRatio;
+
+                let isHit = false;
+
+                // Cek setiap titik kaki
+                for (let j = 0; j < footIndices.length; j++) {
+                    const lm = landmarks[footIndices[j]];
+                    // PENTING: Balik koordinat X (Mirror) karena kamera dibalik
+                    const footX = (1 - lm.x) * w; 
+                    const footY = lm.y * h;
+
+                    // Hitung jarak Euclidean dari kaki ke tengah bola
+                    const dx = footX - ballX;
+                    const dy = footY - ballY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < hitThreshold) {
+                        isHit = true;
+                        break;
+                    }
+                }
+
+                if (isHit) {
+                    handleAnswer(i);
+                    break; // Hanya deteksi satu bola pada satu waktu
+                }
+            }
+        }
+
+        const pose = new Pose({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+        }});
+        
+        pose.setOptions({
+            modelComplexity: 1, // 0 = cepat/ringan, 1 = seimbang, 2 = akurat
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        pose.onResults(onResults);
+
+        function onResults(results) {
+            // Sembunyikan layar loading saat frame pertama dari AI berhasil diproses
+            if (!isAiReady) {
+                isAiReady = true;
+                loadingScreen.classList.add('hidden');
+                startGame();
+            }
+
+            // Bersihkan Canvas
+            ctx.save();
+            ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // 1. Gambar Feed Video (Di-Mirror/Balik arah horizontal seperti cermin)
+            ctx.translate(canvasElement.width, 0);
+            ctx.scale(-1, 1);
+            if (results.image) {
+                // Gambar video menutupi layar (object-cover style)
+                const videoRatio = results.image.width / results.image.height;
+                const canvasRatio = canvasElement.width / canvasElement.height;
+                let drawW, drawH, drawX, drawY;
+
+                if (canvasRatio > videoRatio) {
+                    drawW = canvasElement.width;
+                    drawH = canvasElement.width / videoRatio;
+                    drawX = 0;
+                    drawY = (canvasElement.height - drawH) / 2;
+                } else {
+                    drawH = canvasElement.height;
+                    drawW = canvasElement.height * videoRatio;
+                    drawX = (canvasElement.width - drawW) / 2;
+                    drawY = 0;
+                }
+                ctx.drawImage(results.image, drawX, drawY, drawW, drawH);
+            }
+            ctx.restore(); // Kembalikan transformasi agar UI tidak terbalik teksnya
+
+            // 2. Jika sedang bermain, jalankan logika game
+            if (gameState === 'playing' || gameState === 'gameover') {
+                drawGameUI();
+
+                // 3. Deteksi Pose dan Gambar Kerangka
+                if (results.poseLandmarks) {
+                    drawSkeleton(results.poseLandmarks);
+                    if (gameState === 'playing') {
+                        checkCollisions(results.poseLandmarks);
+                    }
+                }
+            }
+        }
+
+        // Gambar titik-titik kerangka untuk feedback visual pemain
+        function drawSkeleton(landmarks) {
+            ctx.fillStyle = '#10b981'; // Hijau Emerald
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            
+            // Gambar sendi
+            for(let i=0; i<landmarks.length; i++) {
+                // Hanya gambar bagian bawah badan (pinggul ke bawah) agar tidak penuh
+                if (i < 23) continue; 
+                
+                // Visibility check
+                if(landmarks[i].visibility < 0.5) continue;
+
+                const x = (1 - landmarks[i].x) * canvasElement.width; // Mirrored X
+                const y = landmarks[i].y * canvasElement.height;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, 2*Math.PI);
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+
+        // Setup Kamera menggunakan MediaPipe Camera Utils
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                // Kirim frame video ke MediaPipe Pose setiap frame tersedia
+                await pose.send({image: videoElement});
+            },
+            width: 640,
+            height: 480,
+            facingMode: 'user' // Kamera depan
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            // Minta izin audio konteks (browser policy)
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            startScreen.classList.add('hidden');
+            loadingScreen.classList.remove('hidden');
+            gameState = 'loading';
+            
+            // Mulai kamera (akan meminta izin browser)
+            camera.start().catch(err => {
+                alert("Gagal mengakses kamera. Pastikan memberikan izin kamera pada browser Anda.");
+                startScreen.classList.remove('hidden');
+                loadingScreen.classList.add('hidden');
+                gameState = 'start';
+            });
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            gameOverScreen.classList.add('hidden');
+            startGame();
+        });
+
+    </script>
+</body>
+</html>
