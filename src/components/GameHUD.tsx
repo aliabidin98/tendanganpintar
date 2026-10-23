@@ -21,12 +21,12 @@ interface GameHUDProps {
   timeLeft: number;
   cameraActive: boolean;
   soundEnabled: boolean;
-  showSkeleton: boolean;
+  showSkeleton?: boolean;
   feetDetectedCount: number;
   settings?: GameSettings;
   onToggleSound: () => void;
   onToggleCamera: () => void;
-  onToggleSkeleton: () => void;
+  onToggleSkeleton?: () => void;
   onQuit: () => void;
   onSimulateKick: (playerId: 'P1' | 'P2', option: 'A' | 'B') => void;
 }
@@ -188,19 +188,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {/* Right Section: Tool Buttons */}
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onToggleSkeleton}
-            title={showSkeleton ? 'Sembunyikan Rangka' : 'Tampilkan Rangka'}
-            className={`p-1.5 sm:p-2 rounded-xl border transition-colors cursor-pointer backdrop-blur-md ${
-              showSkeleton
-                ? 'bg-sky-500/25 border-sky-400 text-sky-300'
-                : 'bg-white/10 border-white/20 text-slate-300 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-
           <button
             type="button"
             onClick={onToggleSound}

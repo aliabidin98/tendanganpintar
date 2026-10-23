@@ -581,12 +581,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
-            {/* Suara & Garis Pose */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Suara Audio */}
+            <div>
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ soundEnabled: !settings.soundEnabled })}
-                className={`p-3 rounded-xl border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-colors cursor-pointer ${
                   settings.soundEnabled
                     ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
                     : 'bg-slate-800/70 border-slate-700 text-slate-400'
@@ -601,27 +601,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <span className="text-xs font-black font-mono">
                   {settings.soundEnabled ? 'ON' : 'OFF'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ showSkeleton: !settings.showSkeleton })}
-                className={`p-3 rounded-xl border text-left flex items-center justify-between transition-colors cursor-pointer ${
-                  settings.showSkeleton
-                    ? 'bg-sky-500/15 border-sky-400/40 text-sky-200'
-                    : 'bg-slate-800/70 border-slate-700 text-slate-400'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-sky-400" />
-                  <div>
-                    <span className="text-xs font-bold block text-white">Rangka AI Pose</span>
-                    <span className="text-[11px] opacity-75">Visualisasi sendi kaki</span>
-                  </div>
-                </div>
-                <span className="text-xs font-black font-mono">
-                  {settings.showSkeleton ? 'ON' : 'OFF'}
                 </span>
               </button>
             </div>

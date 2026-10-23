@@ -286,16 +286,7 @@ export class ARCanvasRenderer {
       });
     });
 
-    // 8. Render AI MediaPipe Skeleton Line Connections
-    if (state.showSkeleton) {
-      if (state.skeletons && state.skeletons.length > 0) {
-        state.skeletons.forEach((skel) => {
-          this.drawSkeletonOverlay(ctx, width, height, skel.landmarks, skel.playerId, mode);
-        });
-      } else if (state.allLandmarks && state.allLandmarks.length > 0) {
-        this.drawSkeletonOverlay(ctx, width, height, state.allLandmarks, 'SINGLE', mode);
-      }
-    }
+
 
     // 9. Render Tracked Foot Coordinates (Ankles & Toes) with Glowing Halos
     this.drawFootTrackers(ctx, state.footPoints, players);

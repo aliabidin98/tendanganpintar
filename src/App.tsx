@@ -51,7 +51,7 @@ export default function App() {
     mode: '1P',
     durationSeconds: 30,
     soundEnabled: true,
-    showSkeleton: true,
+    showSkeleton: false,
     kickSensitivity: 'normal',
     goalkeeperCharacter: 'lion',
     scorePerGoal: 100,
