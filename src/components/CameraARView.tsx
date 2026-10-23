@@ -155,8 +155,13 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
   const trackerRef = useRef<PoseTrackerManager | null>(null);
 
   const [cameraActive, setCameraActive] = useState(false);
-  const [feetPoints, setFeetPoints] = useState<FootPoint[]>([]);
+  const [feetDetectedCount, setFeetDetectedCount] = useState<number>(0);
+  const feetDetectedCountRef = useRef<number>(0);
   const [timeLeft, setTimeLeft] = useState(settings.durationSeconds);
+
+  const onGameFinishedRef = useRef(onGameFinished);
+  onGameFinishedRef.current = onGameFinished;
+  const hasFinishedRef = useRef(false);
 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -537,13 +542,20 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
     };
   }, [layoutArena]);
 
+  // Safely trigger match completion when countdown reaches 0 without updating parent during render/reducer
+  useEffect(() => {
+    if (timeLeft <= 0 && !hasFinishedRef.current) {
+      hasFinishedRef.current = true;
+      onGameFinishedRef.current(playersRef.current);
+    }
+  }, [timeLeft]);
+
   // Match countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          onGameFinished(playersRef.current);
           return 0;
         }
         if (prev <= 6) {
@@ -554,7 +566,7 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [onGameFinished]);
+  }, []);
 
   // Keyboard shortcut triggers:
   // P1: [Q]/[A] (Kick A), [W]/[S] (Kick B)
@@ -609,7 +621,10 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
         (data) => {
           if (!isMounted) return;
           feetPointsRef.current = data.footPoints;
-          setFeetPoints(data.footPoints);
+          if (data.footPoints.length !== feetDetectedCountRef.current) {
+            feetDetectedCountRef.current = data.footPoints.length;
+            setFeetDetectedCount(data.footPoints.length);
+          }
 
           const currentWidth = canvasRef.current
             ? canvasRef.current.width / (window.devicePixelRatio || 1)
@@ -844,7 +859,7 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
         cameraActive={cameraActive}
         soundEnabled={settings.soundEnabled}
         showSkeleton={settings.showSkeleton}
-        feetDetectedCount={feetPoints.length}
+        feetDetectedCount={feetDetectedCount}
         settings={settings}
         onToggleSound={onToggleSound}
         onToggleCamera={handleToggleCamera}
