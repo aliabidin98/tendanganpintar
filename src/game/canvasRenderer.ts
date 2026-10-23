@@ -26,6 +26,11 @@ export interface PlayerRenderGroup {
   goalkeeperCharacter?: GoalkeeperCharacter;
 }
 
+export interface PlayerSkeleton {
+  playerId: 'P1' | 'P2' | 'SINGLE';
+  landmarks: { x: number; y: number; visibility: number }[];
+}
+
 export interface RenderState {
   width: number;
   height: number;
@@ -34,6 +39,7 @@ export interface RenderState {
   cameraActive: boolean;
   footPoints: FootPoint[];
   allLandmarks?: { x: number; y: number; visibility: number }[];
+  skeletons?: PlayerSkeleton[];
   players: PlayerRenderGroup[];
   showSkeleton: boolean;
   glassTransparency?: number;
@@ -281,8 +287,14 @@ export class ARCanvasRenderer {
     });
 
     // 8. Render AI MediaPipe Skeleton Line Connections
-    if (state.showSkeleton && state.allLandmarks && state.allLandmarks.length > 0) {
-      this.drawSkeletonOverlay(ctx, width, height, state.allLandmarks, mode);
+    if (state.showSkeleton) {
+      if (state.skeletons && state.skeletons.length > 0) {
+        state.skeletons.forEach((skel) => {
+          this.drawSkeletonOverlay(ctx, width, height, skel.landmarks, skel.playerId, mode);
+        });
+      } else if (state.allLandmarks && state.allLandmarks.length > 0) {
+        this.drawSkeletonOverlay(ctx, width, height, state.allLandmarks, 'SINGLE', mode);
+      }
     }
 
     // 9. Render Tracked Foot Coordinates (Ankles & Toes) with Glowing Halos
@@ -848,7 +860,10 @@ export class ARCanvasRenderer {
 
       const isLeft = foot.index === 27 || foot.index === 31;
       const isToe = foot.index === 31 || foot.index === 32;
-      const themeColor = isLeft ? '#10B981' : '#6366F1';
+      const isP2 = foot.playerId === 'P2';
+      const themeColor = isP2
+        ? isLeft ? '#F59E0B' : '#EA580C'
+        : isLeft ? '#10B981' : '#0284C7';
 
       ctx.save();
       ctx.translate(foot.x, foot.y);
@@ -871,18 +886,19 @@ export class ARCanvasRenderer {
       ctx.fill();
 
       ctx.shadowBlur = 0;
-      // Glass foot badge
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      // Glass foot badge with player identification
+      ctx.fillStyle = isP2 ? 'rgba(234, 88, 12, 0.45)' : 'rgba(2, 132, 199, 0.45)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.lineWidth = 1;
+      const playerPrefix = foot.playerId ? `${foot.playerId} ` : '';
       const labelText = isToe
         ? isLeft
-          ? '🦶 Kaki Kiri'
-          : '🦶 Kaki Kanan'
+          ? `${playerPrefix}🦶 Kaki Kiri`
+          : `${playerPrefix}🦶 Kaki Kanan`
         : isLeft
-          ? 'Ankle Kiri'
-          : 'Ankle Kanan';
-      const pillW = 86;
+          ? `${playerPrefix}Ankle Kiri`
+          : `${playerPrefix}Ankle Kanan`;
+      const pillW = foot.playerId ? 104 : 86;
       roundRect(ctx, -pillW / 2, 14, pillW, 20, 6);
       ctx.fill();
       ctx.stroke();
@@ -923,6 +939,7 @@ export class ARCanvasRenderer {
     width: number,
     height: number,
     landmarks: { x: number; y: number; visibility: number }[],
+    playerId: 'P1' | 'P2' | 'SINGLE',
     mode: GameMode
   ) {
     const connections: [number, number][] = [
@@ -946,27 +963,40 @@ export class ARCanvasRenderer {
     ctx.lineWidth = 3.5;
     ctx.lineCap = 'round';
 
+    const strokeColor =
+      playerId === 'P1'
+        ? 'rgba(56, 189, 248, 0.85)'
+        : playerId === 'P2'
+        ? 'rgba(251, 146, 60, 0.85)'
+        : 'rgba(56, 189, 248, 0.7)';
+
+    ctx.strokeStyle = strokeColor;
+
     connections.forEach(([i1, i2]) => {
       const p1 = landmarks[i1];
       const p2 = landmarks[i2];
-      if (p1 && p2 && p1.visibility > 0.4 && p2.visibility > 0.4) {
+      if (p1 && p2 && p1.visibility > 0.35 && p2.visibility > 0.35) {
         const x1 = (1 - p1.x) * width;
         const y1 = p1.y * height;
         const x2 = (1 - p2.x) * width;
         const y2 = p2.y * height;
 
-        const isLeftHalf = x1 < width / 2;
-        ctx.strokeStyle =
-          mode === '2P'
-            ? isLeftHalf
-              ? 'rgba(56, 189, 248, 0.7)'
-              : 'rgba(251, 146, 60, 0.7)'
-            : 'rgba(56, 189, 248, 0.6)';
-
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
+      }
+    });
+
+    // Draw joints
+    landmarks.forEach((p, idx) => {
+      if (p && p.visibility > 0.4 && idx >= 11) {
+        const x = (1 - p.x) * width;
+        const y = p.y * height;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
       }
     });
 

@@ -115,7 +115,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               className={`w-3 h-3 ${feetDetectedCount > 0 ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`}
             />
             <span className="font-mono text-slate-200 text-[10px] hidden md:inline">
-              {feetDetectedCount > 0 ? `${feetDetectedCount}/4 Sensor Kaki` : 'Arahkan Kaki'}
+              {feetDetectedCount > 0
+                ? mode === '2P'
+                  ? `${feetDetectedCount}/8 Sensor (P1 & P2)`
+                  : `${feetDetectedCount}/4 Sensor Kaki`
+                : 'Arahkan Kaki'}
             </span>
           </div>
         </div>

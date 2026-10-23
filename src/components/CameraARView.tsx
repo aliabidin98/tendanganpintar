@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
-import { ARCanvasRenderer, PlayerRenderGroup } from '../game/canvasRenderer';
+import { ARCanvasRenderer, PlayerRenderGroup, PlayerSkeleton } from '../game/canvasRenderer';
 import { PoseTrackerManager } from '../game/poseTracker';
 import { soundEngine } from '../game/audio';
 import { checkFootBallCollision } from '../game/collision';
@@ -170,6 +170,8 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
   cameraActiveRef.current = cameraActive;
 
   const feetPointsRef = useRef<FootPoint[]>([]);
+  const skeletonsRef = useRef<PlayerSkeleton[]>([]);
+  const allLandmarksRef = useRef<{ x: number; y: number; visibility: number }[]>([]);
 
   // Sound sync
   useEffect(() => {
@@ -621,6 +623,8 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
         (data) => {
           if (!isMounted) return;
           feetPointsRef.current = data.footPoints;
+          skeletonsRef.current = data.skeletons || [];
+          allLandmarksRef.current = data.allLandmarks || [];
           if (data.footPoints.length !== feetDetectedCountRef.current) {
             feetDetectedCountRef.current = data.footPoints.length;
             setFeetDetectedCount(data.footPoints.length);
@@ -636,13 +640,15 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
           playersRef.current.forEach((player) => {
             if (player.isKickingLocked) return;
 
-            // In 2P mode, partition feet by screen half
-            let playerFeet = data.footPoints;
-            if (settingsRef.current.mode === '2P') {
+            // In 2P mode, check feet tagged with player.playerId first, then fallback to screen partition
+            let playerFeet = data.footPoints.filter((f) => f.playerId === player.playerId);
+            if (playerFeet.length === 0) {
               playerFeet =
-                player.playerId === 'P1'
-                  ? data.footPoints.filter((f) => f.x < dividerX)
-                  : data.footPoints.filter((f) => f.x >= dividerX);
+                settingsRef.current.mode === '2P'
+                  ? player.playerId === 'P1'
+                    ? data.footPoints.filter((f) => f.x < dividerX)
+                    : data.footPoints.filter((f) => f.x >= dividerX)
+                  : data.footPoints;
             }
 
             if (playerFeet.length === 0) return;
@@ -667,7 +673,8 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
           });
         },
         w,
-        h
+        h,
+        settingsRef.current.mode
       );
 
       if (ready && isMounted) {
@@ -686,6 +693,11 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
       tracker.destroy();
     };
   }, []);
+
+  // Synchronize pose tracker mode when mode changes
+  useEffect(() => {
+    trackerRef.current?.setMode(settings.mode);
+  }, [settings.mode]);
 
   // 60FPS Game Render Loop
   useEffect(() => {
@@ -786,6 +798,8 @@ const CameraARViewInner: React.FC<CameraARViewProps> = ({
             video: videoRef.current,
             cameraActive: cameraActiveRef.current,
             footPoints: feetPointsRef.current,
+            allLandmarks: allLandmarksRef.current,
+            skeletons: skeletonsRef.current,
             players: playerGroups,
             showSkeleton: curSettings.showSkeleton,
             glassTransparency: curSettings.glassTransparency,

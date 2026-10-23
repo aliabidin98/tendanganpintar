@@ -5,12 +5,12 @@
 
 export interface QuizQuestion {
   id: string;
-  category: string;
+  category?: string;
   question: string;
   optionA: string;
   optionB: string;
   correctOption: 'A' | 'B';
-  explanation: string;
+  explanation?: string;
 }
 
 export interface FootPoint {
@@ -21,6 +21,7 @@ export interface FootPoint {
   normX: number; // 0 to 1
   normY: number; // 0 to 1
   visibility: number;
+  playerId?: 'P1' | 'P2';
 }
 
 export interface Ball {

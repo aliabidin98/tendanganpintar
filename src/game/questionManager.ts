@@ -91,18 +91,30 @@ export function parseQuestionsCSV(csvText: string): { questions: QuizQuestion[];
     }
     cells.push(currentCell.trim());
 
-    // Expect at least 5 columns: Kategori, Soal, Pilihan A, Pilihan B, Jawaban Benar, [Penjelasan]
-    if (cells.length < 5) {
-      errors.push(`Baris ${i + 1}: Format kolom tidak lengkap (minimal 5 kolom).`);
+    // Expect at least 4 columns: Soal, Pilihan A, Pilihan B, Jawaban Benar
+    if (cells.length < 4) {
+      errors.push(`Baris ${i + 1}: Format kolom tidak lengkap (minimal 4 kolom: Soal, Opsi A, Opsi B, Kunci Jawaban).`);
       continue;
     }
 
-    const category = cells[0].replace(/^"|"$/g, '') || 'Umum';
-    const question = cells[1].replace(/^"|"$/g, '');
-    const optionA = cells[2].replace(/^"|"$/g, '');
-    const optionB = cells[3].replace(/^"|"$/g, '');
-    const correctRaw = cells[4].replace(/^"|"$/g, '').trim().toUpperCase();
-    const explanation = cells[5] ? cells[5].replace(/^"|"$/g, '') : '';
+    let question = '';
+    let optionA = '';
+    let optionB = '';
+    let correctRaw = '';
+
+    // Check if cell[3] is an answer option (A/B) -> Standard 4-column format: Soal, Pilihan A, Pilihan B, Jawaban Benar
+    if (cells.length === 4 || cells[3]?.trim().toUpperCase() === 'A' || cells[3]?.trim().toUpperCase() === 'B') {
+      question = cells[0].replace(/^"|"$/g, '');
+      optionA = cells[1].replace(/^"|"$/g, '');
+      optionB = cells[2].replace(/^"|"$/g, '');
+      correctRaw = cells[3].replace(/^"|"$/g, '').trim().toUpperCase();
+    } else {
+      // Legacy 5/6 column format: [Kategori], Soal, Pilihan A, Pilihan B, Jawaban Benar, [Penjelasan]
+      question = cells[1].replace(/^"|"$/g, '');
+      optionA = cells[2].replace(/^"|"$/g, '');
+      optionB = cells[3].replace(/^"|"$/g, '');
+      correctRaw = cells[4]?.replace(/^"|"$/g, '').trim().toUpperCase() || '';
+    }
 
     if (!question || !optionA || !optionB) {
       errors.push(`Baris ${i + 1}: Teks soal atau pilihan jawaban tidak boleh kosong.`);
@@ -121,12 +133,10 @@ export function parseQuestionsCSV(csvText: string): { questions: QuizQuestion[];
 
     questions.push({
       id: `custom_${Date.now()}_${i}`,
-      category,
       question,
       optionA,
       optionB,
       correctOption,
-      explanation,
     });
   }
 
@@ -160,12 +170,10 @@ export function parseQuestionsJSON(jsonText: string): { questions: QuizQuestion[
 
       validQuestions.push({
         id: item.id || `custom_${Date.now()}_${index}`,
-        category: item.category || item.kategori || 'Umum',
         question: q,
         optionA: optA,
         optionB: optB,
         correctOption: corr === 'B' ? 'B' : 'A',
-        explanation: item.explanation || item.penjelasan || '',
       });
     });
 
@@ -179,31 +187,25 @@ export function parseQuestionsJSON(jsonText: string): { questions: QuizQuestion[
  * Generate CSV template string
  */
 export function generateTemplateCSV(): string {
-  const headers = ['kategori', 'soal', 'pilihan_a', 'pilihan_b', 'jawaban_benar', 'penjelasan'];
+  const headers = ['soal', 'pilihan_a', 'pilihan_b', 'jawaban_benar'];
   const sampleRows = [
     [
-      'Matematika',
       'Berapa hasil dari 9 x 8 ?',
       '72',
       '64',
       'A',
-      '9 dikali 8 sama dengan 72',
     ],
     [
-      'Sains',
       'Planet terdekat dengan Matahari adalah...',
       'Venus',
       'Merkurius',
       'B',
-      'Merkurius berada paling dekat dengan matahari',
     ],
     [
-      'Geografi',
       'Ibu kota negara Jepang adalah...',
       'Tokyo',
       'Kyoto',
       'A',
-      'Tokyo adalah pusat pemerintahan Jepang saat ini',
     ],
   ];
 
@@ -221,28 +223,22 @@ export function generateTemplateCSV(): string {
 export function generateTemplateJSON(): string {
   const sample = [
     {
-      category: 'Matematika',
       question: 'Berapa hasil dari 15 + 27 ?',
       optionA: '42',
       optionB: '40',
       correctOption: 'A',
-      explanation: '15 + 27 = 42',
     },
     {
-      category: 'Bahasa Indonesia',
       question: 'Lawan kata dari "Rajin" adalah...',
       optionA: 'Pintar',
       optionB: 'Malas',
       correctOption: 'B',
-      explanation: 'Antonim dari rajin adalah malas',
     },
     {
-      category: 'Sains',
       question: 'Zat hijau daun pada tumbuhan disebut...',
       optionA: 'Klorofil',
       optionB: 'Stomata',
       correctOption: 'A',
-      explanation: 'Klorofil berfungsi menyerap cahaya untuk fotosintesis',
     },
   ];
   return JSON.stringify(sample, null, 2);
