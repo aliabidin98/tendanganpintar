@@ -199,6 +199,58 @@ class SoundEngine {
     osc.start();
     osc.stop(ctx.currentTime + 0.35);
   }
+
+  // Crisp wheel click/tick sound when wheel slice passes pointer
+  playWheelClick(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(950, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.025);
+
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.03);
+  }
+
+  // Festive fanfare celebration for winner selection
+  playFanfare(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const notes = [
+      { f: 523.25, d: 0.12, wait: 0 },       // C5
+      { f: 659.25, d: 0.12, wait: 0.1 },    // E5
+      { f: 783.99, d: 0.14, wait: 0.2 },    // G5
+      { f: 1046.5, d: 0.45, wait: 0.32 },   // C6
+    ];
+
+    notes.forEach(({ f, d, wait }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, ctx.currentTime + wait);
+
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + wait);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + wait + d);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + wait);
+      osc.stop(ctx.currentTime + wait + d + 0.05);
+    });
+  }
 }
 
 export const soundEngine = new SoundEngine();

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { GameSettings, GameMode, AppLicenseMode } from '../types/game';
 import { SettingsModal } from './SettingsModal';
+import { RandomNamePickerModal } from './RandomNamePickerModal';
 
 interface StartScreenProps {
   settings: GameSettings;
@@ -48,6 +49,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onStartGame,
 }) => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showNamePicker, setShowNamePicker] = useState(false);
   const isDemo = licenseMode === 'DEMO';
 
   const handleProtectedAction = (action: () => void) => {
@@ -98,6 +100,18 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <span>Mode Full Aktif</span>
             </div>
           )}
+
+          {/* Pilih Nama Acak (Roda Putar) Button */}
+          <button
+            type="button"
+            onClick={() => setShowNamePicker(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-400/40 text-xs font-bold text-amber-300 transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Undi giliran siswa atau kelompok dengan roda putar"
+          >
+            <span className="text-sm">🎡</span>
+            <span className="hidden sm:inline">Pilih Nama Acak</span>
+            <span className="sm:hidden">Acak Nama</span>
+          </button>
 
           {/* Settings Button */}
           <button
@@ -153,11 +167,42 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           , Taklukkan Kiper 3D!
         </h2>
 
-        <p className="text-xs sm:text-sm text-slate-300 text-center max-w-xl mb-4 leading-relaxed">
+        <p className="text-xs sm:text-sm text-slate-300 text-center max-w-xl mb-3 leading-relaxed">
           Kamera mendeteksi sendi pergelangan & ujung kaki pemain via{' '}
           <strong className="text-sky-300">MediaPipe Pose</strong>. Tendang bola ke gawang! Jawaban
           salah akan <strong className="text-rose-400">ditangkap oleh penjaga gawang 3D</strong>!
         </p>
+
+        {/* Quick Access Card: Roda Pilih Nama Acak (Fitur Pengundian Siswa / Kelompok) */}
+        <div className="w-full max-w-2xl mb-4 backdrop-blur-md bg-gradient-to-r from-amber-950/40 via-slate-900/80 to-slate-900/90 border border-amber-500/35 hover:border-amber-400/60 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-lg shadow-amber-500/10 transition-all">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-slate-950 flex items-center justify-center text-xl font-black shrink-0 shadow-md shadow-amber-500/25">
+              🎡
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-black text-white font-['Outfit']">
+                  Pilih Nama Acak (Roda Putar)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase">
+                  Undi Giliran
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Undi giliran siswa atau kelompok secara interaktif sebelum bermain kuis tendangan
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowNamePicker(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black font-['Outfit'] text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+          >
+            <span>Buka Roda</span>
+            <span>🎡</span>
+          </button>
+        </div>
 
         {/* MODE SELECTOR (1 Pemain vs 2 Pemain Layar Dibagi 2) */}
         <div className="w-full max-w-2xl mb-4">
@@ -392,6 +437,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           onQuestionsUpdated={onQuestionsUpdated}
           onResetScores={onResetScores}
           onOpenActivation={onOpenActivation}
+        />
+      )}
+
+      {/* Random Name Picker Modal (Roda Putar Undi Nama) */}
+      {showNamePicker && (
+        <RandomNamePickerModal
+          onClose={() => setShowNamePicker(false)}
         />
       )}
 
